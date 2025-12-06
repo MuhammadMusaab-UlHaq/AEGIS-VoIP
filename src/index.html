@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AEGIS-VoIP | Secure Communication</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <main class="container">
+        <!-- Navigation Header -->
+        <nav>
+            <ul>
+                <li><strong>🛡️ AEGIS-VoIP</strong></li>
+            </ul>
+            <ul>
+                <li id="connection-state">Not Connected</li>
+                <li>
+                    <span id="security-indicator" class="indicator disconnected" title="Security Status">
+                        <span class="indicator-dot"></span>
+                        <span class="indicator-text">Disconnected</span>
+                    </span>
+                </li>
+            </ul>
+        </nav>
+
+        <!-- Video Display Area -->
+        <section id="video-section">
+            <div id="videos">
+                <figure class="video-container">
+                    <video id="localVideo" autoplay muted playsinline></video>
+                    <figcaption>
+                        <span class="video-label">You (Local)</span>
+                    </figcaption>
+                </figure>
+                <figure class="video-container">
+                    <video id="remoteVideo" autoplay playsinline></video>
+                    <figcaption>
+                        <span class="video-label">Remote Peer</span>
+                    </figcaption>
+                    <div id="remote-placeholder">
+                        <span>Waiting for connection...</span>
+                    </div>
+                </figure>
+            </div>
+        </section>
+
+        <!-- Call Controls -->
+        <section id="controls-section">
+            <div id="call-controls">
+                <button id="createCallBtn" class="primary">
+                    📞 Create Call
+                </button>
+                <button id="joinCallBtn" class="secondary">
+                    📲 Join Call
+                </button>
+                <button id="hangupBtn" class="contrast" disabled>
+                    ❌ Hang Up
+                </button>
+            </div>
+            
+            <!-- Media Controls -->
+            <div id="media-controls" class="hidden">
+                <button id="toggleVideoBtn" class="outline" title="Toggle Video">
+                    📹 Video On
+                </button>
+                <button id="toggleAudioBtn" class="outline" title="Toggle Audio">
+                    🎤 Mic On
+                </button>
+            </div>
+        </section>
+
+        <!-- Instructions Panel -->
+        <section id="instructions-section">
+            <details open>
+                <summary>📋 How to Use (Manual Signaling)</summary>
+                <div class="instructions-content">
+                    <div class="instruction-step">
+                        <span class="step-number">1</span>
+                        <div>
+                            <strong>Peer A:</strong> Click "Create Call" to generate an Offer token
+                        </div>
+                    </div>
+                    <div class="instruction-step">
+                        <span class="step-number">2</span>
+                        <div>
+                            <strong>Peer A:</strong> Copy the Offer token and send it to Peer B
+                        </div>
+                    </div>
+                    <div class="instruction-step">
+                        <span class="step-number">3</span>
+                        <div>
+                            <strong>Peer B:</strong> Click "Join Call" and paste the Offer token
+                        </div>
+                    </div>
+                    <div class="instruction-step">
+                        <span class="step-number">4</span>
+                        <div>
+                            <strong>Peer B:</strong> Copy the Answer token and send it back to Peer A
+                        </div>
+                    </div>
+                    <div class="instruction-step">
+                        <span class="step-number">5</span>
+                        <div>
+                            <strong>Peer A:</strong> Paste the Answer token to establish connection
+                        </div>
+                    </div>
+                </div>
+            </details>
+        </section>
+
+        <!-- Debug Console (Optional) -->
+        <section id="debug-section">
+            <details>
+                <summary>🔧 Debug Console</summary>
+                <div id="debug-log"></div>
+                <button id="clearLogBtn" class="outline contrast small">Clear Log</button>
+            </details>
+        </section>
+
+        <!-- Modal for Signaling: Create Call (Peer A - Step 1) -->
+        <dialog id="offer-modal">
+            <article>
+                <header>
+                    <a href="#" aria-label="Close" class="close" data-close-modal></a>
+                    <h2>📤 Offer Created</h2>
+                </header>
+                <p>Copy this Offer token and send it to the person you want to call:</p>
+                <div class="token-container">
+                    <textarea id="offer-display" readonly rows="6" placeholder="Generating offer..."></textarea>
+                    <button id="copy-offer-btn" class="outline">📋 Copy to Clipboard</button>
+                </div>
+                <hr>
+                <p>Once they send back their Answer token, paste it here:</p>
+                <div class="token-container">
+                    <textarea id="answer-input" rows="4" placeholder="Paste Answer token here..."></textarea>
+                </div>
+                <footer>
+                    <button id="cancel-offer-btn" class="secondary" data-close-modal>Cancel Call</button>
+                    <button id="connect-btn" class="primary">🔗 Connect</button>
+                </footer>
+            </article>
+        </dialog>
+
+        <!-- Modal for Signaling: Join Call (Peer B) -->
+        <dialog id="join-modal">
+            <article>
+                <header>
+                    <a href="#" aria-label="Close" class="close" data-close-modal></a>
+                    <h2>📥 Join a Call</h2>
+                </header>
+                <p>Paste the Offer token you received:</p>
+                <div class="token-container">
+                    <textarea id="offer-input" rows="6" placeholder="Paste Offer token here..."></textarea>
+                </div>
+                <footer>
+                    <button class="secondary" data-close-modal>Cancel</button>
+                    <button id="process-offer-btn" class="primary">Process Offer</button>
+                </footer>
+            </article>
+        </dialog>
+
+        <!-- Modal for Answer Display (Peer B - Step 2) -->
+        <dialog id="answer-modal">
+            <article>
+                <header>
+                    <a href="#" aria-label="Close" class="close" data-close-modal></a>
+                    <h2>📤 Answer Created</h2>
+                </header>
+                <p>Copy this Answer token and send it back to the caller:</p>
+                <div class="token-container">
+                    <textarea id="answer-display" readonly rows="6" placeholder="Generating answer..."></textarea>
+                    <button id="copy-answer-btn" class="outline">📋 Copy to Clipboard</button>
+                </div>
+                <p class="info-text">
+                    ℹ️ The call will connect automatically once the caller processes your answer.
+                </p>
+                <footer>
+                    <button id="answer-done-btn" class="primary">Done</button>
+                </footer>
+            </article>
+        </dialog>
+
+        <!-- Modal for SAS Verification (Day 3) -->
+        <dialog id="sas-modal">
+            <article>
+                <header>
+                    <h2>🔒 Security Verification</h2>
+                </header>
+                <p>Verbally compare this Short Authentication String (SAS) with your peer. If it matches exactly, click Accept to secure the call.</p>
+                <div id="sas-display">
+                    <span id="sas-code">----</span>
+                </div>
+                <p class="warning-text">
+                    ⚠️ If the codes don't match, you may be under a Man-in-the-Middle attack!
+                </p>
+                <footer>
+                    <button id="sas-reject" class="secondary">❌ Reject</button>
+                    <button id="sas-accept" class="primary">✅ Accept</button>
+                </footer>
+            </article>
+        </dialog>
+
+    </main>
+
+    <footer class="container">
+        <small>
+            <span>AEGIS-VoIP Proof of Concept</span> • 
+            <span>Post-Quantum Secure Communication</span> •
+            <span id="version">v0.1.0 (Day 1)</span>
+        </small>
+    </footer>
+
+    <script src="app.js" type="module"></script>
+</body>
+</html>

@@ -1,0 +1,438 @@
+/* ============================================
+   AEGIS-VoIP - Custom Styles
+   ============================================ */
+
+:root {
+    --aegis-primary: #4dabf7;
+    --aegis-success: #51cf66;
+    --aegis-warning: #fcc419;
+    --aegis-danger: #ff6b6b;
+    --aegis-dark: #1a1a2e;
+    --aegis-darker: #16213e;
+    --aegis-border: #2d3748;
+}
+
+/* Global Adjustments */
+body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+main.container {
+    flex: 1;
+    padding-top: 1rem;
+}
+
+footer.container {
+    text-align: center;
+    padding: 1rem;
+    opacity: 0.7;
+}
+
+/* ============================================
+   Navigation & Security Indicator
+   ============================================ */
+
+nav {
+    border-bottom: 1px solid var(--aegis-border);
+    padding-bottom: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+#connection-state {
+    font-size: 0.85rem;
+    opacity: 0.8;
+}
+
+.indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 2rem;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.indicator-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.indicator.disconnected {
+    background: rgba(128, 128, 128, 0.2);
+}
+.indicator.disconnected .indicator-dot {
+    background: #888;
+    animation: none;
+}
+
+.indicator.connecting {
+    background: rgba(252, 196, 25, 0.2);
+}
+.indicator.connecting .indicator-dot {
+    background: var(--aegis-warning);
+}
+
+.indicator.connected {
+    background: rgba(77, 171, 247, 0.2);
+}
+.indicator.connected .indicator-dot {
+    background: var(--aegis-primary);
+}
+
+.indicator.unverified {
+    background: rgba(255, 107, 107, 0.2);
+}
+.indicator.unverified .indicator-dot {
+    background: var(--aegis-danger);
+}
+
+.indicator.verified {
+    background: rgba(81, 207, 102, 0.2);
+}
+.indicator.verified .indicator-dot {
+    background: var(--aegis-success);
+}
+
+/* ============================================
+   Video Section
+   ============================================ */
+
+#video-section {
+    margin-bottom: 1.5rem;
+}
+
+#videos {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+@media (max-width: 768px) {
+    #videos {
+        grid-template-columns: 1fr;
+    }
+}
+
+.video-container {
+    position: relative;
+    margin: 0;
+    background: var(--aegis-darker);
+    border-radius: 0.75rem;
+    overflow: hidden;
+    border: 2px solid var(--aegis-border);
+    transition: border-color 0.3s ease;
+}
+
+.video-container:hover {
+    border-color: var(--aegis-primary);
+}
+
+.video-container video {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    display: block;
+    background: #000;
+}
+
+.video-container figcaption {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 0.5rem;
+    background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
+    text-align: center;
+}
+
+.video-label {
+    font-size: 0.85rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+#remote-placeholder {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--aegis-darker);
+    color: #666;
+    font-size: 0.9rem;
+}
+
+#remote-placeholder.hidden {
+    display: none;
+}
+
+/* ============================================
+   Controls Section
+   ============================================ */
+
+#controls-section {
+    margin-bottom: 1.5rem;
+}
+
+#call-controls {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+}
+
+#call-controls button {
+    min-width: 140px;
+}
+
+#media-controls {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: center;
+}
+
+#media-controls.hidden {
+    display: none;
+}
+
+#media-controls button {
+    font-size: 0.9rem;
+    padding: 0.5rem 1rem;
+}
+
+#media-controls button.muted {
+    opacity: 0.6;
+    text-decoration: line-through;
+}
+
+/* ============================================
+   Instructions Section
+   ============================================ */
+
+#instructions-section {
+    margin-bottom: 1.5rem;
+}
+
+#instructions-section details {
+    background: var(--aegis-darker);
+    border-radius: 0.5rem;
+    border: 1px solid var(--aegis-border);
+}
+
+#instructions-section summary {
+    padding: 1rem;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.instructions-content {
+    padding: 0 1rem 1rem;
+}
+
+.instruction-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--aegis-border);
+}
+
+.instruction-step:last-child {
+    border-bottom: none;
+}
+
+.step-number {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--aegis-primary);
+    color: #000;
+    border-radius: 50%;
+    font-weight: bold;
+    font-size: 0.85rem;
+}
+
+/* ============================================
+   Debug Section
+   ============================================ */
+
+#debug-section {
+    margin-bottom: 1rem;
+}
+
+#debug-section details {
+    background: var(--aegis-darker);
+    border-radius: 0.5rem;
+    border: 1px solid var(--aegis-border);
+}
+
+#debug-section summary {
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
+#debug-log {
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 0.5rem 1rem;
+    font-family: monospace;
+    font-size: 0.8rem;
+    background: #0d1117;
+    border-radius: 0.25rem;
+    margin: 0 1rem;
+}
+
+#debug-log .log-entry {
+    padding: 0.25rem 0;
+    border-bottom: 1px solid #21262d;
+}
+
+#debug-log .log-entry:last-child {
+    border-bottom: none;
+}
+
+#debug-log .log-time {
+    color: #8b949e;
+    margin-right: 0.5rem;
+}
+
+#debug-log .log-info { color: #58a6ff; }
+#debug-log .log-success { color: #3fb950; }
+#debug-log .log-warning { color: #d29922; }
+#debug-log .log-error { color: #f85149; }
+
+#clearLogBtn {
+    margin: 0.5rem 1rem 1rem;
+    padding: 0.35rem 0.75rem;
+    font-size: 0.8rem;
+}
+
+/* ============================================
+   Modal Dialogs
+   ============================================ */
+
+dialog {
+    max-width: 600px;
+    width: 90%;
+}
+
+dialog article {
+    margin: 0;
+}
+
+dialog header {
+    padding: 1.5rem 1.5rem 1rem;
+}
+
+dialog header h2 {
+    margin: 0;
+}
+
+dialog article > p,
+dialog article > div,
+dialog article > hr {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+}
+
+dialog footer {
+    padding: 1rem 1.5rem 1.5rem;
+    display: flex;
+    gap: 0.75rem;
+    justify-content: flex-end;
+}
+
+.token-container {
+    margin-bottom: 1rem;
+    padding: 0 1.5rem;
+}
+
+.token-container textarea {
+    font-family: monospace;
+    font-size: 0.75rem;
+    resize: vertical;
+    background: #0d1117;
+    border-color: var(--aegis-border);
+}
+
+.token-container button {
+    margin-top: 0.5rem;
+    width: 100%;
+}
+
+.info-text {
+    font-size: 0.9rem;
+    opacity: 0.8;
+    font-style: italic;
+}
+
+.warning-text {
+    font-size: 0.9rem;
+    color: var(--aegis-warning);
+}
+
+/* ============================================
+   SAS Modal
+   ============================================ */
+
+#sas-display {
+    text-align: center;
+    padding: 2rem;
+    margin: 1rem 1.5rem;
+    background: var(--aegis-darker);
+    border-radius: 0.5rem;
+    border: 2px dashed var(--aegis-primary);
+}
+
+#sas-code {
+    font-family: 'Courier New', monospace;
+    font-size: 2.5rem;
+    font-weight: bold;
+    letter-spacing: 0.3em;
+    color: var(--aegis-primary);
+}
+
+/* ============================================
+   Utility Classes
+   ============================================ */
+
+.hidden {
+    display: none !important;
+}
+
+.small {
+    font-size: 0.85rem;
+    padding: 0.5rem 1rem;
+}
+
+/* Copy success animation */
+@keyframes copySuccess {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+.copy-success {
+    animation: copySuccess 0.3s ease;
+    background: var(--aegis-success) !important;
+}
