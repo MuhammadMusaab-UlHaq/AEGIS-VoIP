@@ -1,10 +1,15 @@
 /**
  * AEGIS-VoIP - Post-Quantum Secure Communication
- * Day 1: Foundational WebRTC Video Call with Manual Signaling
+ * Day 2: Hybrid Post-Quantum Key Exchange Integration
  * 
  * This module implements a peer-to-peer video call using WebRTC
- * with manual signaling (copy/paste of offer/answer tokens).
+ * with manual signaling and hybrid PQC key exchange (X25519 + Kyber512).
  */
+
+// ============================================
+// DAY 2: Import the Crypto Module
+// ============================================
+import { Crypto, CryptoUtils } from './crypto.js';
 
 // ============================================
 // Configuration
@@ -17,7 +22,18 @@ const CONFIG = {
         { urls: 'stun:stun1.l.google.com:19302' },
         { urls: 'stun:stun2.l.google.com:19302' },
         { urls: 'stun:stun3.l.google.com:19302' },
-        { urls: 'stun:stun4.l.google.com:19302' }
+        { urls: 'stun:stun4.l.google.com:19302' },
+        // Add a free TURN server for testing
+        {
+            urls: 'turn:openrelay.metered.ca:80',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+        },
+        {
+            urls: 'turn:openrelay.metered.ca:443',
+            username: 'openrelayproject', 
+            credential: 'openrelayproject'
+        }
     ],
     // Media constraints
     mediaConstraints: {
@@ -33,7 +49,7 @@ const CONFIG = {
         }
     },
     // ICE gathering timeout (ms)
-    iceGatheringTimeout: 3000
+    iceGatheringTimeout: 5000
 };
 
 // ============================================
@@ -47,7 +63,19 @@ const state = {
     isInitiator: false,
     connectionState: 'disconnected',
     iceCandidates: [],
-    iceGatheringComplete: false
+    iceGatheringComplete: false,
+    
+    // DAY 2 & 3: Crypto state
+    crypto: {
+        myKeys: null,              // Our hybrid key pair
+        theirEcdhPk: null,         // Peer's ECDH public key
+        theirKyberPk: null,        // Peer's Kyber public key (responder only)
+        myEcdhPk: null,            // Our ECDH public key (responder only)
+        kyberCiphertext: null,     // Kyber ciphertext (shared)
+        masterSecret: null,        // The derived master shared secret
+        isKeyExchangeComplete: false,
+        sas: null                  // Generated SAS codes
+    }
 };
 
 // ============================================
@@ -126,7 +154,8 @@ const Logger = {
     info(msg) { this.log(msg, 'info'); },
     success(msg) { this.log(msg, 'success'); },
     warning(msg) { this.log(msg, 'warning'); },
-    error(msg) { this.log(msg, 'error'); }
+    error(msg) { this.log(msg, 'error'); },
+    crypto(msg) { this.log(`🔐 ${msg}`, 'crypto'); }  // DAY 2: Special crypto logging
 };
 
 // ============================================
@@ -146,9 +175,9 @@ function updateSecurityIndicator(status) {
     const statusTexts = {
         'disconnected': 'Disconnected',
         'connecting': 'Connecting...',
-        'connected': 'Connected',
-        'unverified': 'Unverified',
-        'verified': 'Verified ✓'
+        'connected': 'Connected (Unverified)',
+        'unverified': 'Connected - Verify Security',
+        'verified': 'Connected - Verified ✓'
     };
     
     textSpan.textContent = statusTexts[status] || status;
@@ -195,7 +224,7 @@ function closeModal(modal) {
 
 function closeAllModals() {
     [elements.offerModal, elements.joinModal, elements.answerModal, elements.sasModal].forEach(modal => {
-        if (modal.open) modal.close();
+        if (modal && modal.open) modal.close();
     });
 }
 
@@ -239,6 +268,11 @@ function createPeerConnection() {
     
     const pc = new RTCPeerConnection({ iceServers: CONFIG.iceServers });
     
+    // Create a data channel to force ICE candidate generation
+    const dataChannel = pc.createDataChannel('dummy');
+    dataChannel.onopen = () => Logger.info('Data channel opened');
+    dataChannel.onclose = () => Logger.info('Data channel closed');
+    
     // Add local tracks to connection
     if (state.localStream) {
         state.localStream.getTracks().forEach(track => {
@@ -258,17 +292,36 @@ function createPeerConnection() {
         }
     };
     
-    // Handle ICE connection state changes
+    // Debug: Track ICE gathering state changes
+    pc.onicegatheringstatechange = () => {
+        Logger.info(`ICE gathering state changed to: ${pc.iceGatheringState}`);
+        console.log('ICE gathering state:', pc.iceGatheringState);
+        console.log('Current candidate count:', state.iceCandidates.length);
+    };
+    
+    // Handle ICE connection state changes - ENHANCED DEBUG
     pc.oniceconnectionstatechange = () => {
         Logger.info(`ICE connection state: ${pc.iceConnectionState}`);
-        updateConnectionStateDisplay(`ICE: ${pc.iceConnectionState}`);
+        
+        // Add debug info
+        console.log('=== DEBUG: ICE State Change ===');
+        console.log('ICE State:', pc.iceConnectionState);
+        console.log('Connection State:', pc.connectionState);
+        console.log('=============================');
         
         switch (pc.iceConnectionState) {
             case 'connected':
             case 'completed':
-                updateSecurityIndicator('connected');
+                updateSecurityIndicator('unverified');
                 setButtonStates('connected');
-                elements.remotePlaceholder.classList.add('hidden');
+                Logger.success('ICE connection established');
+                
+                // Force video play when connected
+                if (elements.remoteVideo && elements.remoteVideo.srcObject) {
+                    elements.remoteVideo.play().catch(err => {
+                        Logger.error('Auto-play failed: ' + err.message);
+                    });
+                }
                 break;
             case 'disconnected':
                 updateSecurityIndicator('connecting');
@@ -293,17 +346,38 @@ function createPeerConnection() {
         }
     };
     
-    // Handle incoming tracks
+    // Handle incoming tracks - ENHANCED DEBUG
     pc.ontrack = (event) => {
         Logger.success(`Received remote ${event.track.kind} track`);
         
         if (!state.remoteStream) {
             state.remoteStream = new MediaStream();
             elements.remoteVideo.srcObject = state.remoteStream;
+            Logger.info('Created new MediaStream and attached to video element');
         }
         
         state.remoteStream.addTrack(event.track);
-        elements.remotePlaceholder.classList.add('hidden');
+        
+        // Debug: Check track state
+        console.log('=== DEBUG: Track Added ===');
+        console.log('Track kind:', event.track.kind);
+        console.log('Track enabled:', event.track.enabled);
+        console.log('Track muted:', event.track.muted);
+        console.log('Track readyState:', event.track.readyState);
+        console.log('Track ID:', event.track.id);
+        console.log('Remote video element exists:', !!elements.remoteVideo);
+        console.log('Remote video srcObject:', elements.remoteVideo?.srcObject);
+        console.log('Remote video muted:', elements.remoteVideo?.muted);
+        console.log('Remote stream track count:', state.remoteStream?.getTracks().length);
+        console.log('=========================');
+        
+        // Force unmute the track if it's muted
+        if (event.track.muted) {
+            Logger.warning(`Track ${event.track.kind} is muted at source - this needs peer to unmute`);
+        }
+        
+        // Don't hide placeholder here anymore
+        // elements.remotePlaceholder.classList.add('hidden');
     };
     
     // Handle negotiation needed (for future use)
@@ -316,19 +390,26 @@ function createPeerConnection() {
 }
 
 // ============================================
-// Signaling Token Helpers
+// DAY 2: Enhanced Signaling Token with Crypto
 // ============================================
 
-function createSignalingToken(sdp, iceCandidates) {
+/**
+ * Create signaling token that includes SDP, ICE candidates, and crypto data
+ */
+function createSignalingToken(sdp, iceCandidates, cryptoData = null) {
     const token = {
         sdp: sdp,
         ice: iceCandidates,
         timestamp: Date.now(),
-        version: '1.0'
+        version: '2.0',  // Updated version for Day 2
+        crypto: cryptoData  // New: crypto key exchange data
     };
     return btoa(JSON.stringify(token));
 }
 
+/**
+ * Parse signaling token and extract all data
+ */
 function parseSignalingToken(tokenString) {
     try {
         const decoded = atob(tokenString.trim());
@@ -348,29 +429,36 @@ function parseSignalingToken(tokenString) {
 // Wait for ICE gathering to complete (with timeout)
 function waitForIceGathering() {
     return new Promise((resolve) => {
-        if (state.iceGatheringComplete) {
-            resolve();
-            return;
-        }
+        const startTime = Date.now();
+        const minWaitTime = 1000; // Wait at least 1 second for candidates
         
-        const checkInterval = setInterval(() => {
-            if (state.iceGatheringComplete) {
-                clearInterval(checkInterval);
+        const checkComplete = () => {
+            const elapsed = Date.now() - startTime;
+            const gatheringState = state.peerConnection?.iceGatheringState;
+            const candidateCount = state.iceCandidates.length;
+            
+            console.log(`ICE check: state=${gatheringState}, candidates=${candidateCount}, elapsed=${elapsed}ms`);
+            
+            // Need at least 1 candidate AND either gathering complete OR enough time passed
+            if (candidateCount > 0 && (gatheringState === 'complete' || elapsed >= minWaitTime)) {
+                Logger.info(`ICE gathering finished with ${candidateCount} candidates`);
                 resolve();
+            } else if (elapsed >= CONFIG.iceGatheringTimeout) {
+                Logger.warning(`ICE gathering timeout with ${candidateCount} candidates`);
+                resolve();
+            } else {
+                setTimeout(checkComplete, 200);
             }
-        }, 100);
+        };
         
-        // Timeout fallback
-        setTimeout(() => {
-            clearInterval(checkInterval);
-            Logger.warning('ICE gathering timeout - proceeding with available candidates');
-            resolve();
-        }, CONFIG.iceGatheringTimeout);
+        // Start checking after a short delay
+        setTimeout(checkComplete, 200);
     });
 }
 
 // ============================================
 // Call Flow: Create Call (Peer A / Initiator)
+// DAY 2: Now includes hybrid key generation
 // ============================================
 
 async function createCall() {
@@ -378,6 +466,11 @@ async function createCall() {
     state.isInitiator = true;
     state.iceCandidates = [];
     state.iceGatheringComplete = false;
+    
+    // Reset crypto state
+    state.crypto.myKeys = null;
+    state.crypto.masterSecret = null;
+    state.crypto.isKeyExchangeComplete = false;
     
     // Initialize media if not already done
     if (!state.localStream) {
@@ -392,6 +485,11 @@ async function createCall() {
     setButtonStates('calling');
     
     try {
+        // DAY 2: Generate hybrid key pair
+        Logger.crypto('Generating hybrid key pair (X25519 + Kyber512)...');
+        state.crypto.myKeys = await Crypto.generateHybridKeyPair();  // Add await
+        Logger.crypto('Hybrid key pair generated successfully');
+        
         // Create offer
         Logger.info('Creating SDP offer...');
         const offer = await state.peerConnection.createOffer({
@@ -403,14 +501,34 @@ async function createCall() {
         await state.peerConnection.setLocalDescription(offer);
         Logger.success('Local description set (offer)');
         
+        // Debug: Check SDP for candidates
+        const sdp = state.peerConnection.localDescription.sdp;
+        const candidateLines = sdp.split('\n').filter(line => line.startsWith('a=candidate'));
+        console.log('=== SDP Candidate Lines ===');
+        console.log('Number of candidates in SDP:', candidateLines.length);
+        candidateLines.forEach(line => console.log(line));
+        console.log('===========================');
+        
         // Wait for ICE gathering
         Logger.info('Gathering ICE candidates...');
         await waitForIceGathering();
         
-        // Create signaling token
+        // Get candidates from the local description itself (they're embedded in SDP)
+        // Also include any separately collected candidates
+        const localDesc = state.peerConnection.localDescription;
+        
+        // DAY 2: Create crypto data to include in token
+        const cryptoData = {
+            ecdhPublicKey: CryptoUtils.toBase64(state.crypto.myKeys.ecdh.publicKey),
+            kyberPublicKey: CryptoUtils.toBase64(state.crypto.myKeys.kyber.publicKey)
+        };
+        Logger.crypto('Public keys encoded for transmission');
+        
+        // Create signaling token - use the final local description which contains ICE candidates
         const token = createSignalingToken(
-            state.peerConnection.localDescription,
-            state.iceCandidates
+            localDesc,
+            state.iceCandidates,  // May be empty, but SDP has candidates
+            cryptoData  // Include crypto data
         );
         
         // Display in modal
@@ -418,15 +536,20 @@ async function createCall() {
         elements.answerInput.value = '';
         openModal(elements.offerModal);
         
-        Logger.success('Offer token generated - ready to share');
+        Logger.success('Offer token generated with PQC key material - ready to share');
         
     } catch (error) {
         Logger.error(`Failed to create offer: ${error.message}`);
+        console.error(error);
         hangUp();
     }
 }
 
-// Process answer from Peer B
+// ============================================
+// Process Answer from Peer B (Initiator completes key exchange)
+// DAY 2: Now performs initiator key agreement
+// ============================================
+
 async function processAnswer() {
     const answerToken = elements.answerInput.value.trim();
     
@@ -454,11 +577,59 @@ async function processAnswer() {
             }
         }
         
+        // DAY 2 & 3: Perform initiator key agreement + SAS
+        if (parsed.crypto && state.crypto.myKeys) {
+            Logger.crypto('Performing initiator key agreement...');
+            
+            // Decode responder's crypto data
+            const theirEcdhPk = CryptoUtils.fromBase64(parsed.crypto.ecdhPublicKey);
+            const kyberCiphertext = CryptoUtils.fromBase64(parsed.crypto.kyberCiphertext);
+            
+            // Store for SAS generation
+            state.crypto.theirEcdhPk = theirEcdhPk;
+            state.crypto.kyberCiphertext = kyberCiphertext;
+            
+            // Perform key agreement
+            const keyAgreementResult = await Crypto.initiatorKeyAgreement(
+                state.crypto.myKeys.ecdh.privateKey,
+                state.crypto.myKeys.kyber.secretKey,
+                theirEcdhPk,
+                kyberCiphertext
+            );
+            
+            // Derive master secret
+            state.crypto.masterSecret = await Crypto.deriveMasterSecret(
+                keyAgreementResult.ecdhSecret,
+                keyAgreementResult.kyberSecret
+            );
+            
+            state.crypto.isKeyExchangeComplete = true;
+            Logger.crypto('✅ Master secret derived successfully!');
+            
+            // DAY 3: Generate SAS
+            // Order: masterSecret, initiatorEcdhPk, responderEcdhPk, initiatorKyberPk, kyberCiphertext
+            state.crypto.sas = await Crypto.generateSAS(
+                state.crypto.masterSecret,
+                state.crypto.myKeys.ecdh.publicKey,  // initiator ECDH (me)
+                theirEcdhPk,                          // responder ECDH (them)
+                state.crypto.myKeys.kyber.publicKey, // initiator Kyber PK
+                kyberCiphertext                       // Kyber ciphertext (shared)
+            );
+            
+            Logger.crypto(`SAS generated: ${state.crypto.sas.base32} / ${state.crypto.sas.words}`);
+            updateSecurityIndicator('unverified');
+            showSASVerification();
+            
+        } else {
+            Logger.warning('No crypto data in answer or missing local keys');
+        }
+        
         closeModal(elements.offerModal);
         Logger.success('Connection process complete - waiting for media');
         
     } catch (error) {
         Logger.error(`Failed to process answer: ${error.message}`);
+        console.error(error);
         alert(error.message);
     }
 }
@@ -473,6 +644,11 @@ async function joinCall() {
     state.iceCandidates = [];
     state.iceGatheringComplete = false;
     
+    // Reset crypto state
+    state.crypto.myKeys = null;
+    state.crypto.masterSecret = null;
+    state.crypto.isKeyExchangeComplete = false;
+    
     // Initialize media if not already done
     if (!state.localStream) {
         const success = await initializeLocalMedia();
@@ -483,6 +659,11 @@ async function joinCall() {
     elements.offerInput.value = '';
     openModal(elements.joinModal);
 }
+
+// ============================================
+// Process Offer (Responder performs key agreement)
+// DAY 2: Now performs responder key agreement
+// ============================================
 
 async function processOffer() {
     const offerToken = elements.offerInput.value.trim();
@@ -517,6 +698,59 @@ async function processOffer() {
             }
         }
         
+        // DAY 2 & 3: Perform responder key agreement + SAS
+        let cryptoResponseData = null;
+        
+        if (parsed.crypto) {
+            Logger.crypto('Performing responder key agreement...');
+            
+            // Decode initiator's public keys
+            const theirEcdhPk = CryptoUtils.fromBase64(parsed.crypto.ecdhPublicKey);
+            const theirKyberPk = CryptoUtils.fromBase64(parsed.crypto.kyberPublicKey);
+            
+            // Perform key agreement (generates our ECDH keys, encapsulates Kyber)
+            const keyAgreementResult = await Crypto.responderKeyAgreement(theirEcdhPk, theirKyberPk);
+            
+            // Store for SAS generation
+            state.crypto.myEcdhPk = keyAgreementResult.myEcdhPublicKey;
+            state.crypto.theirEcdhPk = theirEcdhPk;
+            state.crypto.theirKyberPk = theirKyberPk;
+            state.crypto.kyberCiphertext = keyAgreementResult.kyberCiphertext;
+            
+            // Derive master secret
+            state.crypto.masterSecret = await Crypto.deriveMasterSecret(
+                keyAgreementResult.ecdhSecret,
+                keyAgreementResult.kyberSecret
+            );
+            
+            state.crypto.isKeyExchangeComplete = true;
+            Logger.crypto('✅ Master secret derived successfully!');
+            
+            // DAY 3: Generate SAS
+            // Order must match initiator: masterSecret, initiatorEcdhPk, responderEcdhPk, initiatorKyberPk, kyberCiphertext
+            state.crypto.sas = await Crypto.generateSAS(
+                state.crypto.masterSecret,
+                theirEcdhPk,                              // initiator ECDH (them)
+                keyAgreementResult.myEcdhPublicKey,       // responder ECDH (me)
+                theirKyberPk,                             // initiator Kyber PK
+                keyAgreementResult.kyberCiphertext        // Kyber ciphertext (shared)
+            );
+            
+            Logger.crypto(`SAS generated: ${state.crypto.sas.base32} / ${state.crypto.sas.words}`);
+            updateSecurityIndicator('unverified');
+            showSASVerification();
+            
+            // Prepare crypto data for answer
+            cryptoResponseData = {
+                ecdhPublicKey: CryptoUtils.toBase64(keyAgreementResult.myEcdhPublicKey),
+                kyberCiphertext: CryptoUtils.toBase64(keyAgreementResult.kyberCiphertext)
+            };
+            Logger.crypto('Crypto response data prepared for answer');
+            
+        } else {
+            Logger.warning('No crypto data in offer - proceeding without PQC');
+        }
+        
         // Create answer
         Logger.info('Creating SDP answer...');
         const answer = await state.peerConnection.createAnswer();
@@ -527,10 +761,11 @@ async function processOffer() {
         Logger.info('Gathering ICE candidates...');
         await waitForIceGathering();
         
-        // Create signaling token
+        // Create signaling token with crypto response
         const token = createSignalingToken(
             state.peerConnection.localDescription,
-            state.iceCandidates
+            state.iceCandidates,
+            cryptoResponseData  // Include crypto response
         );
         
         // Close join modal, open answer modal
@@ -538,10 +773,11 @@ async function processOffer() {
         elements.answerDisplay.value = token;
         openModal(elements.answerModal);
         
-        Logger.success('Answer token generated - ready to share');
+        Logger.success('Answer token generated with PQC key material - ready to share');
         
     } catch (error) {
         Logger.error(`Failed to process offer: ${error.message}`);
+        console.error(error);
         alert(error.message);
         hangUp();
     }
@@ -578,6 +814,16 @@ function hangUp() {
     state.isInitiator = false;
     state.iceCandidates = [];
     state.iceGatheringComplete = false;
+    
+    // DAY 2 & 3: Clear crypto state
+    state.crypto.myKeys = null;
+    state.crypto.theirEcdhPk = null;
+    state.crypto.theirKyberPk = null;
+    state.crypto.kyberCiphertext = null;
+    state.crypto.myEcdhPk = null;
+    state.crypto.masterSecret = null;
+    state.crypto.isKeyExchangeComplete = false;
+    state.crypto.sas = null;
     
     // Reset UI
     updateSecurityIndicator('disconnected');
@@ -646,6 +892,61 @@ async function copyToClipboard(text, button) {
 }
 
 // ============================================
+// DAY 3: SAS Verification UI
+// ============================================
+
+function showSASVerification() {
+    if (!state.crypto.sas) {
+        Logger.error('No SAS available to display');
+        return;
+    }
+    
+    // Mute remote media until verified
+    muteUntilVerified();
+    
+    // Update SAS display with both formats
+    const sasDisplay = elements.sasCode;
+    sasDisplay.innerHTML = `
+        <div class="sas-base32">${state.crypto.sas.base32}</div>
+        <div class="sas-words">${state.crypto.sas.words}</div>
+    `;
+    
+    // Show the modal
+    Logger.info('Showing SAS verification modal');
+    openModal(elements.sasModal);
+}
+
+function muteUntilVerified() {
+    Logger.info('muteUntilVerified called - NOT actually muting for debug');
+    // Keep it simple for now - we'll add muting back after it works
+}
+
+function unmuteAfterVerified() {
+    Logger.success('unmuteAfterVerified called');
+    
+    if (elements.remoteVideo) {
+        console.log('=== DEBUG: Unmute Attempt ===');
+        console.log('Video element exists:', !!elements.remoteVideo);
+        console.log('Has srcObject:', !!elements.remoteVideo.srcObject);
+        console.log('Current muted state:', elements.remoteVideo.muted);
+        console.log('============================');
+        
+        elements.remoteVideo.muted = false;
+        elements.remoteVideo.style.filter = 'none';
+        elements.remoteVideo.style.opacity = '1';
+        
+        // Try to play
+        elements.remoteVideo.play().then(() => {
+            Logger.success('Video play() succeeded');
+        }).catch(err => {
+            Logger.error('Video play() failed: ' + err.message);
+        });
+    } else {
+        Logger.error('Remote video element not found!');
+    }
+}
+
+// ============================================
 // Event Listeners
 // ============================================
 
@@ -680,17 +981,19 @@ function initializeEventListeners() {
         closeModal(elements.answerModal);
     });
     
-    // SAS modal (placeholder for Day 3)
+    // SAS modal
     elements.sasAccept.addEventListener('click', () => {
+        Logger.success('SAS verification ACCEPTED by user');
         updateSecurityIndicator('verified');
+        unmuteAfterVerified();  // Call unmute function
         closeModal(elements.sasModal);
-        Logger.success('SAS verification accepted');
     });
+    
     elements.sasReject.addEventListener('click', () => {
-        closeModal(elements.sasModal);
-        Logger.error('SAS verification rejected - possible MITM attack');
-        alert('Connection terminated due to security mismatch. Possible MITM attack.');
+        Logger.warning('SAS verification REJECTED by user');
+        updateSecurityIndicator('disconnected');
         hangUp();
+        closeModal(elements.sasModal);
     });
     
     // Debug controls
@@ -747,6 +1050,18 @@ async function initialize() {
     
     Logger.success('WebRTC support confirmed');
     
+    // DAY 2: Initialize crypto libraries
+    try {
+        Logger.info('Initializing cryptographic libraries...');
+        await Crypto.initialize();
+        Logger.success('Crypto libraries initialized (libsodium + Kyber512)');
+    } catch (error) {
+        Logger.error(`Failed to initialize crypto: ${error.message}`);
+        console.error(error);
+        alert('Failed to initialize cryptographic libraries. Check console for details.');
+        return;
+    }
+    
     // Initialize event listeners
     initializeEventListeners();
     Logger.success('Event listeners initialized');
@@ -755,7 +1070,7 @@ async function initialize() {
     setButtonStates('initial');
     updateSecurityIndicator('disconnected');
     
-    Logger.success('=== AEGIS-VoIP Ready ===');
+    Logger.success('=== AEGIS-VoIP Ready (Day 2: Hybrid PQC Enabled) ===');
 }
 
 // Start the application

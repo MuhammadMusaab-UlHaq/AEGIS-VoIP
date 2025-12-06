@@ -1,0 +1,22 @@
+{
+  "name": "info_sec_sem_proj",
+  "version": "1.0.0",
+  "description": "A proof-of-concept secure VoIP solution demonstrating hybrid post-quantum cryptography, ZRTP-inspired authentication, and double-layer encryption.",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "devDependencies": {
+    "vite": "^7.2.6"
+  },
+  "dependencies": {
+    "kyber-crystals": "^1.0.7",
+    "libsodium-wrappers": "^0.7.15"
+  }
+}

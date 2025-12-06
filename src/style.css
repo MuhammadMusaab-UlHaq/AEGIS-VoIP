@@ -436,3 +436,74 @@ dialog footer {
     animation: copySuccess 0.3s ease;
     background: var(--aegis-success) !important;
 }
+
+/* ============================================
+   DAY 3: SAS Verification Styles
+   ============================================ */
+
+.sas-base32 {
+    font-size: 3rem;
+    font-weight: bold;
+    font-family: 'Courier New', monospace;
+    letter-spacing: 0.3em;
+    color: var(--aegis-primary);
+    margin-bottom: 0.5rem;
+}
+
+.sas-words {
+    font-size: 1.2rem;
+    font-style: italic;
+    color: var(--muted-color);
+    text-transform: capitalize;
+}
+
+#sas-modal article {
+    text-align: center;
+}
+
+#sas-modal header h2 {
+    color: var(--aegis-warning);
+}
+
+/* ============================================
+   DAY 3: Verification Pending Overlay
+   ============================================ */
+
+.verification-pending {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.85);
+    color: var(--warning-color);
+    text-align: center;
+    padding: 1rem;
+}
+
+.verification-pending .lock-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    animation: pulse 2s infinite;
+}
+
+.verification-pending p {
+    margin: 0.25rem 0;
+}
+
+.verification-pending .small {
+    font-size: 0.8rem;
+    color: var(--muted-color);
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.7; transform: scale(1.1); }
+}
+
+/* Enhanced video blur effect for unverified state */
+video.unverified {
+    filter: blur(15px) grayscale(100%);
+    opacity: 0.5;
+    transition: all 0.3s ease;
+}
