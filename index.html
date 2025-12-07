@@ -74,36 +74,36 @@
         <!-- Instructions Panel -->
         <section id="instructions-section">
             <details open>
-                <summary>📋 How to Use (Automatic Connection)</summary>
+                <summary>📋 How to Use (Manual Signaling)</summary>
                 <div class="instructions-content">
                     <div class="instruction-step">
                         <span class="step-number">1</span>
                         <div>
-                            <strong>Peer A:</strong> Click "Create Call" to generate a Room ID
+                            <strong>Peer A:</strong> Click "Create Call" to generate an Offer token
                         </div>
                     </div>
                     <div class="instruction-step">
                         <span class="step-number">2</span>
                         <div>
-                            <strong>Peer A:</strong> Share the Room ID with Peer B (via chat, email, etc.)
+                            <strong>Peer A:</strong> Copy the Offer token and send it to Peer B
                         </div>
                     </div>
                     <div class="instruction-step">
                         <span class="step-number">3</span>
                         <div>
-                            <strong>Peer B:</strong> Click "Join Call" and enter the Room ID
+                            <strong>Peer B:</strong> Click "Join Call" and paste the Offer token
                         </div>
                     </div>
                     <div class="instruction-step">
                         <span class="step-number">4</span>
                         <div>
-                            <strong>Both:</strong> Connection establishes automatically with PQC encryption
+                            <strong>Peer B:</strong> Copy the Answer token and send it back to Peer A
                         </div>
                     </div>
                     <div class="instruction-step">
                         <span class="step-number">5</span>
                         <div>
-                            <strong>Both:</strong> Verify the security code (SAS) verbally to confirm secure connection
+                            <strong>Peer A:</strong> Paste the Answer token to establish connection
                         </div>
                     </div>
                 </div>
@@ -119,46 +119,68 @@
             </details>
         </section>
 
-        <!-- Modal for Room Created (Peer A) -->
-        <dialog id="room-modal">
+        <!-- Modal for Signaling: Create Call (Peer A - Step 1) -->
+        <dialog id="offer-modal">
             <article>
                 <header>
                     <a href="#" aria-label="Close" class="close" data-close-modal></a>
-                    <h2>📞 Room Created</h2>
+                    <h2>� Offer Created</h2>
                 </header>
-                <p>Share this Room ID with the person you want to call:</p>
+                <p>Copy this Offer token and send it to the person you want to call:</p>
                 <div class="token-container">
-                    <input type="text" id="room-id-display" readonly placeholder="Generating..." style="font-size: 1.5em; text-align: center; font-weight: bold; letter-spacing: 0.1em;">
-                    <button id="copy-room-id-btn" class="outline">📋 Copy Room ID</button>
+                    <textarea id="offer-display" readonly rows="6" placeholder="Generating offer..."></textarea>
+                    <button id="copy-offer-btn" class="outline">📋 Copy to Clipboard</button>
                 </div>
-                <p class="info-text">
-                    ℹ️ The call will connect automatically when they join with this Room ID.
-                </p>
+                <hr>
+                <p>Once they send back their Answer token, paste it here:</p>
+                <div class="token-container">
+                    <textarea id="answer-input" rows="4" placeholder="Paste Answer token here..."></textarea>
+                </div>
                 <footer>
-                    <button id="cancel-room-btn" class="secondary" data-close-modal>Cancel</button>
+                    <button id="cancel-offer-btn" class="secondary" data-close-modal>Cancel Call</button>
+                    <button id="connect-btn" class="primary">🔗 Connect</button>
                 </footer>
             </article>
         </dialog>
 
-        <!-- Modal for Join Call (Peer B) -->
+        <!-- Modal for Signaling: Join Call (Peer B) -->
         <dialog id="join-modal">
             <article>
                 <header>
                     <a href="#" aria-label="Close" class="close" data-close-modal></a>
                     <h2>📥 Join a Call</h2>
                 </header>
-                <p>Enter the Room ID you received:</p>
+                <p>Paste the Offer token you received:</p>
                 <div class="token-container">
-                    <input type="text" id="room-id-input" placeholder="Enter Room ID (e.g., A1B2C3D4)" style="font-size: 1.2em; text-align: center; text-transform: uppercase;">
+                    <textarea id="offer-input" rows="6" placeholder="Paste Offer token here..."></textarea>
                 </div>
                 <footer>
                     <button class="secondary" data-close-modal>Cancel</button>
-                    <button id="join-room-btn" class="primary">Join Room</button>
+                    <button id="process-offer-btn" class="primary">Process Offer</button>
                 </footer>
             </article>
         </dialog>
 
-
+        <!-- Modal for Answer Display (Peer B - Step 2) -->
+        <dialog id="answer-modal">
+            <article>
+                <header>
+                    <a href="#" aria-label="Close" class="close" data-close-modal></a>
+                    <h2>📤 Answer Created</h2>
+                </header>
+                <p>Copy this Answer token and send it back to the caller:</p>
+                <div class="token-container">
+                    <textarea id="answer-display" readonly rows="6" placeholder="Generating answer..."></textarea>
+                    <button id="copy-answer-btn" class="outline">📋 Copy to Clipboard</button>
+                </div>
+                <p class="info-text">
+                    ℹ️ The call will connect automatically once the caller processes your answer.
+                </p>
+                <footer>
+                    <button id="answer-done-btn" class="primary">Done</button>
+                </footer>
+            </article>
+        </dialog>
 
         <!-- Modal for SAS Verification (Day 3) -->
         <dialog id="sas-modal">
@@ -186,7 +208,7 @@
         <small>
             <span>AEGIS-VoIP Proof of Concept</span> • 
             <span>Post-Quantum Secure Communication</span> •
-            <span id="version">v0.3.0 (Automatic Auth)</span>
+            <span id="version">v0.2.0 (Day 2)</span>
         </small>
     </footer>
 

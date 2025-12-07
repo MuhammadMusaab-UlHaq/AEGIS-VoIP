@@ -26,8 +26,7 @@ const CONFIG = {
             autoGainControl: true
         }
     },
-    iceGatheringTimeout: 5000,
-    signalingServer: 'ws://localhost:8080'
+    iceGatheringTimeout: 5000
 };
 
 // ============================================
@@ -42,13 +41,6 @@ const state = {
     connectionState: 'disconnected',
     iceCandidates: [],
     iceGatheringComplete: false,
-    
-    signaling: {
-        ws: null,
-        roomId: null,
-        clientId: null,
-        connected: false
-    },
     
     crypto: {
         myKeys: null,
@@ -81,14 +73,21 @@ const elements = {
     connectionState: document.getElementById('connection-state'),
     mediaControls: document.getElementById('media-controls'),
     
-    roomModal: document.getElementById('room-modal'),
-    roomIdDisplay: document.getElementById('room-id-display'),
-    copyRoomIdBtn: document.getElementById('copy-room-id-btn'),
-    cancelRoomBtn: document.getElementById('cancel-room-btn'),
+    offerModal: document.getElementById('offer-modal'),
+    offerDisplay: document.getElementById('offer-display'),
+    answerInput: document.getElementById('answer-input'),
+    copyOfferBtn: document.getElementById('copy-offer-btn'),
+    cancelOfferBtn: document.getElementById('cancel-offer-btn'),
+    connectBtn: document.getElementById('connect-btn'),
     
     joinModal: document.getElementById('join-modal'),
-    roomIdInput: document.getElementById('room-id-input'),
-    joinRoomBtn: document.getElementById('join-room-btn'),
+    offerInput: document.getElementById('offer-input'),
+    processOfferBtn: document.getElementById('process-offer-btn'),
+    
+    answerModal: document.getElementById('answer-modal'),
+    answerDisplay: document.getElementById('answer-display'),
+    copyAnswerBtn: document.getElementById('copy-answer-btn'),
+    answerDoneBtn: document.getElementById('answer-done-btn'),
     
     sasModal: document.getElementById('sas-modal'),
     sasCode: document.getElementById('sas-code'),
@@ -176,7 +175,7 @@ function openModal(modal) { modal.showModal(); }
 function closeModal(modal) { modal.close(); }
 
 function closeAllModals() {
-    [elements.roomModal, elements.joinModal, elements.sasModal].forEach(modal => {
+    [elements.offerModal, elements.joinModal, elements.answerModal, elements.sasModal].forEach(modal => {
         if (modal && modal.open) modal.close();
     });
 }
@@ -211,124 +210,6 @@ function stopLocalMedia() {
 }
 
 // ============================================
-// Signaling
-// ============================================
-
-function connectSignaling() {
-    return new Promise((resolve, reject) => {
-        Logger.info(`Connecting to signaling server: ${CONFIG.signalingServer}`);
-        
-        const ws = new WebSocket(CONFIG.signalingServer);
-        
-        ws.onopen = () => {
-            Logger.success('Connected to signaling server');
-            state.signaling.ws = ws;
-            state.signaling.connected = true;
-            resolve(ws);
-        };
-        
-        ws.onerror = (error) => {
-            Logger.error('Signaling connection error');
-            reject(new Error('Failed to connect to signaling server'));
-        };
-        
-        ws.onclose = () => {
-            Logger.info('Signaling connection closed');
-            state.signaling.connected = false;
-            state.signaling.ws = null;
-        };
-        
-        ws.onmessage = (event) => {
-            try {
-                const message = JSON.parse(event.data);
-                handleSignalingMessage(message);
-            } catch (error) {
-                Logger.error(`Failed to parse signaling message: ${error.message}`);
-            }
-        };
-    });
-}
-
-function disconnectSignaling() {
-    if (state.signaling.ws) {
-        state.signaling.ws.close();
-        state.signaling.ws = null;
-        state.signaling.connected = false;
-        state.signaling.roomId = null;
-        state.signaling.clientId = null;
-    }
-}
-
-function sendSignalingMessage(message) {
-    if (state.signaling.ws && state.signaling.connected) {
-        state.signaling.ws.send(JSON.stringify(message));
-    } else {
-        Logger.error('Cannot send message: signaling not connected');
-    }
-}
-
-async function handleSignalingMessage(message) {
-    Logger.info(`Signaling message: ${message.type}`);
-    
-    switch (message.type) {
-        case 'room-created':
-            state.signaling.roomId = message.roomId;
-            state.signaling.clientId = message.clientId;
-            Logger.success(`Room created: ${message.roomId}`);
-            elements.roomIdDisplay.value = message.roomId;
-            openModal(elements.roomModal);
-            break;
-            
-        case 'room-joined':
-            state.signaling.roomId = message.roomId;
-            state.signaling.clientId = message.clientId;
-            Logger.success(`Joined room: ${message.roomId}`);
-            closeModal(elements.joinModal);
-            updateSecurityIndicator('connecting');
-            setButtonStates('calling');
-            break;
-            
-        case 'peer-joined':
-            Logger.success('Peer joined the room - sending offer');
-            await sendOffer();
-            break;
-            
-        case 'offer':
-            Logger.info('Received offer from peer');
-            await handleOffer(message);
-            break;
-            
-        case 'answer':
-            Logger.info('Received answer from peer');
-            await handleAnswer(message);
-            break;
-            
-        case 'ice-candidate':
-            if (message.candidate) {
-                try {
-                    await state.peerConnection.addIceCandidate(new RTCIceCandidate(message.candidate));
-                    Logger.info('Added remote ICE candidate');
-                } catch (error) {
-                    Logger.warning(`Failed to add ICE candidate: ${error.message}`);
-                }
-            }
-            break;
-            
-        case 'peer-left':
-            Logger.warning('Peer left the room');
-            alert('The other peer has left the call.');
-            hangUp();
-            break;
-            
-        case 'error':
-            Logger.error(`Signaling error: ${message.message}`);
-            alert(`Error: ${message.message}`);
-            hangUp();
-            break;
-    }
-}
-
-// ============================================
 // WebRTC Peer Connection
 // ============================================
 
@@ -347,10 +228,7 @@ function createPeerConnection() {
     pc.onicecandidate = (event) => {
         if (event.candidate) {
             Logger.info(`ICE candidate gathered: ${event.candidate.candidate.substring(0, 50)}...`);
-            sendSignalingMessage({
-                type: 'ice-candidate',
-                candidate: event.candidate
-            });
+            state.iceCandidates.push(event.candidate);
         } else {
             Logger.success('ICE gathering complete');
             state.iceGatheringComplete = true;
@@ -410,7 +288,54 @@ function createPeerConnection() {
     return pc;
 }
 
+// ============================================
+// Signaling
+// ============================================
 
+function createSignalingToken(sdp, iceCandidates, cryptoData = null) {
+    const token = {
+        sdp: sdp,
+        ice: iceCandidates,
+        timestamp: Date.now(),
+        version: '3.0',
+        crypto: cryptoData
+    };
+    return btoa(JSON.stringify(token));
+}
+
+function parseSignalingToken(tokenString) {
+    try {
+        const decoded = atob(tokenString.trim());
+        const token = JSON.parse(decoded);
+        if (!token.sdp || !token.ice) throw new Error('Invalid token structure');
+        return token;
+    } catch (error) {
+        Logger.error(`Failed to parse signaling token: ${error.message}`);
+        throw new Error('Invalid signaling token.');
+    }
+}
+
+function waitForIceGathering() {
+    return new Promise((resolve) => {
+        if (state.iceGatheringComplete) {
+            resolve();
+            return;
+        }
+        
+        const checkInterval = setInterval(() => {
+            if (state.iceGatheringComplete) {
+                clearInterval(checkInterval);
+                resolve();
+            }
+        }, 100);
+        
+        setTimeout(() => {
+            clearInterval(checkInterval);
+            Logger.warning('ICE gathering timeout - proceeding with available candidates');
+            resolve();
+        }, CONFIG.iceGatheringTimeout);
+    });
+}
 
 // ============================================
 // Create Call (Initiator)
@@ -419,6 +344,8 @@ function createPeerConnection() {
 async function createCall() {
     Logger.info('=== Starting Create Call Flow ===');
     state.isInitiator = true;
+    state.iceCandidates = [];
+    state.iceGatheringComplete = false;
     
     state.crypto.myKeys = null;
     state.crypto.masterSecret = null;
@@ -430,30 +357,15 @@ async function createCall() {
         if (!success) return;
     }
     
+    createPeerConnection();
+    updateSecurityIndicator('connecting');
+    setButtonStates('calling');
+    
     try {
-        await connectSignaling();
-        
         Logger.crypto('Generating hybrid key pair (X25519 + Kyber)...');
         state.crypto.myKeys = await Crypto.generateHybridKeyPair();
         Logger.crypto('Hybrid key pair generated successfully');
         
-        createPeerConnection();
-        updateSecurityIndicator('connecting');
-        setButtonStates('calling');
-        
-        sendSignalingMessage({ type: 'create-room' });
-        Logger.info('Requesting room creation...');
-        
-    } catch (error) {
-        Logger.error(`Failed to create call: ${error.message}`);
-        console.error(error);
-        alert('Failed to connect to signaling server. Please try again.');
-        hangUp();
-    }
-}
-
-async function sendOffer() {
-    try {
         Logger.info('Creating SDP offer...');
         const offer = await state.peerConnection.createOffer({
             offerToReceiveAudio: true,
@@ -463,43 +375,67 @@ async function sendOffer() {
         await state.peerConnection.setLocalDescription(offer);
         Logger.success('Local description set (offer)');
         
+        Logger.info('Gathering ICE candidates...');
+        await waitForIceGathering();
+        
         const cryptoData = {
             ecdhPublicKey: CryptoUtils.toBase64(state.crypto.myKeys.ecdh.publicKey),
             kyberPublicKey: CryptoUtils.toBase64(state.crypto.myKeys.kyber.publicKey)
         };
         Logger.crypto('Public keys encoded for transmission');
         
-        sendSignalingMessage({
-            type: 'offer',
-            sdp: state.peerConnection.localDescription,
-            crypto: cryptoData
-        });
+        const token = createSignalingToken(
+            state.peerConnection.localDescription,
+            state.iceCandidates,
+            cryptoData
+        );
         
-        Logger.success('Offer sent with PQC key material');
-        closeModal(elements.roomModal);
+        elements.offerDisplay.value = token;
+        elements.answerInput.value = '';
+        openModal(elements.offerModal);
+        
+        Logger.success('Offer token generated with PQC key material - ready to share');
         
     } catch (error) {
-        Logger.error(`Failed to send offer: ${error.message}`);
+        Logger.error(`Failed to create offer: ${error.message}`);
         console.error(error);
         hangUp();
     }
 }
 
 // ============================================
-// Handle Answer (Initiator)
+// Process Answer (Initiator)
 // ============================================
 
-async function handleAnswer(message) {
+async function processAnswer() {
+    const answerToken = elements.answerInput.value.trim();
+    if (!answerToken) {
+        alert('Please paste the Answer token');
+        return;
+    }
+    
     try {
-        const answerDesc = new RTCSessionDescription(message.sdp);
+        Logger.info('Processing Answer token...');
+        const parsed = parseSignalingToken(answerToken);
+        
+        const answerDesc = new RTCSessionDescription(parsed.sdp);
         await state.peerConnection.setRemoteDescription(answerDesc);
         Logger.success('Remote description set (answer)');
         
-        if (message.crypto && state.crypto.myKeys) {
+        Logger.info(`Adding ${parsed.ice.length} remote ICE candidates...`);
+        for (const candidate of parsed.ice) {
+            try {
+                await state.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+            } catch (e) {
+                Logger.warning(`Failed to add ICE candidate: ${e.message}`);
+            }
+        }
+        
+        if (parsed.crypto && state.crypto.myKeys) {
             Logger.crypto('Performing initiator key agreement...');
             
-            const theirEcdhPk = CryptoUtils.fromBase64(message.crypto.ecdhPublicKey);
-            const kyberCiphertext = CryptoUtils.fromBase64(message.crypto.kyberCiphertext);
+            const theirEcdhPk = CryptoUtils.fromBase64(parsed.crypto.ecdhPublicKey);
+            const kyberCiphertext = CryptoUtils.fromBase64(parsed.crypto.kyberCiphertext);
             
             state.crypto.theirEcdhPk = theirEcdhPk;
             state.crypto.kyberCiphertext = kyberCiphertext;
@@ -530,16 +466,18 @@ async function handleAnswer(message) {
             Logger.crypto(`SAS generated: ${state.crypto.sas.base32} / ${state.crypto.sas.words}`);
             updateSecurityIndicator('unverified');
             showSASVerification();
+            
         } else {
             Logger.warning('No crypto data in answer or missing local keys');
         }
         
-        Logger.success('Answer processed - connection established');
+        closeModal(elements.offerModal);
+        Logger.success('Connection process complete - waiting for media');
         
     } catch (error) {
-        Logger.error(`Failed to handle answer: ${error.message}`);
+        Logger.error(`Failed to process answer: ${error.message}`);
         console.error(error);
-        hangUp();
+        alert(error.message);
     }
 }
 
@@ -550,6 +488,8 @@ async function handleAnswer(message) {
 async function joinCall() {
     Logger.info('=== Starting Join Call Flow ===');
     state.isInitiator = false;
+    state.iceCandidates = [];
+    state.iceGatheringComplete = false;
     
     state.crypto.myKeys = null;
     state.crypto.masterSecret = null;
@@ -561,49 +501,49 @@ async function joinCall() {
         if (!success) return;
     }
     
-    elements.roomIdInput.value = '';
+    elements.offerInput.value = '';
     openModal(elements.joinModal);
 }
 
-async function joinRoomById() {
-    const roomId = elements.roomIdInput.value.trim().toUpperCase();
-    if (!roomId) {
-        alert('Please enter a Room ID');
+// ============================================
+// Process Offer (Responder)
+// ============================================
+
+async function processOffer() {
+    const offerToken = elements.offerInput.value.trim();
+    if (!offerToken) {
+        alert('Please paste the Offer token');
         return;
     }
     
     try {
-        await connectSignaling();
-        sendSignalingMessage({
-            type: 'join-room',
-            roomId: roomId
-        });
-        Logger.info(`Attempting to join room: ${roomId}`);
-    } catch (error) {
-        Logger.error(`Failed to join room: ${error.message}`);
-        alert('Failed to connect to signaling server. Please try again.');
-    }
-}
-
-// ============================================
-// Handle Offer (Responder)
-// ============================================
-
-async function handleOffer(message) {
-    try {
-        createPeerConnection();
+        Logger.info('Processing Offer token...');
+        const parsed = parseSignalingToken(offerToken);
         
-        const offerDesc = new RTCSessionDescription(message.sdp);
+        createPeerConnection();
+        updateSecurityIndicator('connecting');
+        setButtonStates('calling');
+        
+        const offerDesc = new RTCSessionDescription(parsed.sdp);
         await state.peerConnection.setRemoteDescription(offerDesc);
         Logger.success('Remote description set (offer)');
         
+        Logger.info(`Adding ${parsed.ice.length} remote ICE candidates...`);
+        for (const candidate of parsed.ice) {
+            try {
+                await state.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+            } catch (e) {
+                Logger.warning(`Failed to add ICE candidate: ${e.message}`);
+            }
+        }
+        
         let cryptoResponseData = null;
         
-        if (message.crypto) {
+        if (parsed.crypto) {
             Logger.crypto('Performing responder key agreement...');
             
-            const theirEcdhPk = CryptoUtils.fromBase64(message.crypto.ecdhPublicKey);
-            const theirKyberPk = CryptoUtils.fromBase64(message.crypto.kyberPublicKey);
+            const theirEcdhPk = CryptoUtils.fromBase64(parsed.crypto.ecdhPublicKey);
+            const theirKyberPk = CryptoUtils.fromBase64(parsed.crypto.kyberPublicKey);
             
             const keyAgreementResult = await Crypto.responderKeyAgreement(theirEcdhPk, theirKyberPk);
             
@@ -637,6 +577,7 @@ async function handleOffer(message) {
                 kyberCiphertext: CryptoUtils.toBase64(keyAgreementResult.kyberCiphertext)
             };
             Logger.crypto('Crypto response data prepared for answer');
+            
         } else {
             Logger.warning('No crypto data in offer - proceeding without PQC');
         }
@@ -646,17 +587,25 @@ async function handleOffer(message) {
         await state.peerConnection.setLocalDescription(answer);
         Logger.success('Local description set (answer)');
         
-        sendSignalingMessage({
-            type: 'answer',
-            sdp: state.peerConnection.localDescription,
-            crypto: cryptoResponseData
-        });
+        Logger.info('Gathering ICE candidates...');
+        await waitForIceGathering();
         
-        Logger.success('Answer sent with PQC key material');
+        const token = createSignalingToken(
+            state.peerConnection.localDescription,
+            state.iceCandidates,
+            cryptoResponseData
+        );
+        
+        closeModal(elements.joinModal);
+        elements.answerDisplay.value = token;
+        openModal(elements.answerModal);
+        
+        Logger.success('Answer token generated with PQC key material - ready to share');
         
     } catch (error) {
-        Logger.error(`Failed to handle offer: ${error.message}`);
+        Logger.error(`Failed to process offer: ${error.message}`);
         console.error(error);
+        alert(error.message);
         hangUp();
     }
 }
@@ -669,11 +618,6 @@ function hangUp() {
     Logger.info('=== Hanging up call ===');
     
     closeAllModals();
-    
-    if (state.signaling.connected) {
-        sendSignalingMessage({ type: 'leave-room' });
-        disconnectSignaling();
-    }
     
     if (state.peerConnection) {
         state.peerConnection.close();
@@ -690,6 +634,8 @@ function hangUp() {
     stopLocalMedia();
     
     state.isInitiator = false;
+    state.iceCandidates = [];
+    state.iceGatheringComplete = false;
     
     state.crypto.myKeys = null;
     state.crypto.theirEcdhPk = null;
@@ -791,15 +737,23 @@ function initializeEventListeners() {
     elements.toggleVideoBtn.addEventListener('click', toggleVideo);
     elements.toggleAudioBtn.addEventListener('click', toggleAudio);
     
-    elements.copyRoomIdBtn.addEventListener('click', () => {
-        copyToClipboard(elements.roomIdDisplay.value, elements.copyRoomIdBtn);
+    elements.copyOfferBtn.addEventListener('click', () => {
+        copyToClipboard(elements.offerDisplay.value, elements.copyOfferBtn);
     });
-    elements.cancelRoomBtn.addEventListener('click', () => {
-        closeModal(elements.roomModal);
+    elements.cancelOfferBtn.addEventListener('click', () => {
+        closeModal(elements.offerModal);
         hangUp();
     });
+    elements.connectBtn.addEventListener('click', processAnswer);
     
-    elements.joinRoomBtn.addEventListener('click', joinRoomById);
+    elements.processOfferBtn.addEventListener('click', processOffer);
+    
+    elements.copyAnswerBtn.addEventListener('click', () => {
+        copyToClipboard(elements.answerDisplay.value, elements.copyAnswerBtn);
+    });
+    elements.answerDoneBtn.addEventListener('click', () => {
+        closeModal(elements.answerModal);
+    });
     
     elements.sasAccept.addEventListener('click', () => {
         Logger.success('SAS verification ACCEPTED by user');
