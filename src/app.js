@@ -319,9 +319,10 @@ function createPeerConnection() {
     }
     
     // Setup sender transforms IMMEDIATELY after adding tracks
+    // FIX: Only attach to VIDEO tracks to prevent audio issues in Firefox
     if (encryptionWorker && supportsInsertableStreams) {
         pc.getSenders().forEach(sender => {
-            if (sender.track) {
+            if (sender.track && sender.track.kind === 'video') { // <--- Added check here
                 try {
                     if (hasModernInsertableStreams) {
                         sender.transform = new RTCRtpScriptTransform(encryptionWorker, {
@@ -340,6 +341,8 @@ function createPeerConnection() {
                 } catch (error) {
                     Logger.error(`Sender transform setup failed: ${error.message}`);
                 }
+            } else if (sender.track) {
+                Logger.info(`Skipping double encryption for ${sender.track.kind} track (stability)`);
             }
         });
     }
@@ -403,7 +406,8 @@ function createPeerConnection() {
         elements.remotePlaceholder.classList.add('hidden');
         
         // Setup receiver transform
-        if (encryptionWorker && supportsInsertableStreams) {
+        // FIX: Only attach to VIDEO tracks to prevent audio issues in Firefox
+        if (encryptionWorker && supportsInsertableStreams && event.track.kind === 'video') { // <--- Added check here
             try {
                 if (hasModernInsertableStreams) {
                     event.receiver.transform = new RTCRtpScriptTransform(encryptionWorker, {

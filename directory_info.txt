@@ -1,0 +1,1837 @@
+================================================================================
+PROJECT CONTEXT
+Generated: 2025-12-07 12:59:14
+Root: D:\info_sec_sem_proj
+================================================================================
+
+GIT INFORMATION:
+----------------------------------------
+Branch: master
+Last commit: 40c6aa1 - simplified worker.js, still issue in pc firefox of audio not being sent properly. (29 minutes ago)
+Status: 1 modified, 2 untracked/added
+
+DIRECTORY STRUCTURE:
+----------------------------------------
+info_sec_sem_proj/
+├── .gitignore (153B)
+├── README.md (9.3KB)
+├── index.html (9.1KB)
+├── package-lock.json (33.7KB)
+├── package.json (557B)
+├── vite.config.js (300B)
+├── papers/
+│   └── [skipped: 15.pdf]
+├── public/
+├── src/
+│   ├── app.js (38.0KB)
+│   ├── crypto.js (16.2KB)
+│   ├── style.css (10.0KB)
+│   └── worker.js (4.9KB)
+
+FILE CONTENTS:
+
+================================================================================
+FILE: README.md
+
+================================================================================
+# AEGIS-VoIP 🛡️
+## Post-Quantum Secure Voice/Video Communication System
+
+A proof-of-concept implementation of quantum-resistant, end-to-end encrypted video calling using WebRTC with hybrid post-quantum cryptography and double-layer encryption.
+
+---
+
+## 🚀 Features
+
+### Security Features
+- **Hybrid Post-Quantum Key Exchange**: X25519 (ECDH) + Kyber-1024 (NIST ML-KEM)
+- **Double-Layer Encryption**: 
+  - Layer 1: WebRTC's built-in DTLS-SRTP
+  - Layer 2: Custom AES-256-GCM via Insertable Streams
+- **MITM Detection**: ZRTP-inspired Short Authentication String (SAS)
+- **Perfect Forward Secrecy**: Each call uses unique ephemeral keys
+- **Manual Signaling**: No server can intercept call metadata
+
+### Technical Features
+- Pure browser-based (no plugins/extensions)
+- Peer-to-peer communication via WebRTC
+- Works locally without any server infrastructure
+- Progressive Web App (PWA) capable
+
+---
+
+## 🔒 Security Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    AEGIS-VoIP Security Stack                     │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Application Layer:                                              │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │ AES-256-GCM Encryption (from PQC-derived key)            │  │
+│  │ - Implemented via WebRTC Insertable Streams              │  │
+│  │ - Frame-level encryption with authentication             │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                                                                 │
+│  Transport Layer:                                               │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │ DTLS-SRTP (WebRTC built-in)                              │  │
+│  │ - Standard WebRTC encryption                             │  │
+│  │ - Provides first layer of protection                    │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                                                                 │
+│  Key Agreement:                                                 │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │ Hybrid PQC: X25519 + Kyber-1024                          │  │
+│  │ - Quantum-resistant key exchange                         │  │
+│  │ - 256-bit master secret derivation                       │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🛠️ How to Run
+
+### Prerequisites
+- Modern browser (Chrome 90+, Firefox 117+, Edge 90+)
+- Node.js and npm (for development server)
+- Camera and microphone access
+
+### Installation
+
+1. **Clone the repository:**
+```bash
+git clone <repository-url>
+cd aegis-voip
+```
+
+2. **Install dependencies:**
+```bash
+npm install
+```
+
+3. **Start the development server:**
+```bash
+npm run dev
+```
+
+4. **Open in browser:**
+```
+http://localhost:5173
+```
+
+### Making a Secure Call
+
+1. **Initiator (Peer A):**
+   - Open the application in a browser tab
+   - Click "Create Call"
+   - Copy the Offer token
+   - Send it to Peer B (via any messenger/email)
+
+2. **Responder (Peer B):**
+   - Open the application in another tab/device
+   - Click "Join Call"
+   - Paste the Offer token
+   - Copy the generated Answer token
+   - Send it back to Peer A
+
+3. **Initiator (Peer A):**
+   - Paste the Answer token
+   - Click "Connect"
+
+4. **Both Peers:**
+   - Verbally compare the 4-character SAS code
+   - If codes match, click "Accept"
+   - Call is now quantum-secure with double encryption!
+
+---
+
+## 🔐 Threat Model
+
+### Protected Against:
+- **Quantum Attacks**: Hybrid PQC protects against future quantum computers
+- **Man-in-the-Middle**: SAS verification detects active attackers
+- **Passive Eavesdropping**: Double encryption prevents wiretapping
+- **Server Compromise**: Manual signaling means no server has keys
+- **DTLS Downgrade**: Second encryption layer provides defense-in-depth
+
+### Limitations:
+- Cannot protect against endpoint compromise (malware)
+- Requires user vigilance for SAS comparison
+- Browser/OS vulnerabilities out of scope
+- No protection against traffic analysis
+
+---
+
+## 📊 Security Analysis
+
+### Key Exchange Security
+- **Classical Security**: 128-bit (X25519 ECDH)
+- **Post-Quantum Security**: NIST Level 5 (Kyber-1024)
+- **Combined Security**: Maximum of both
+
+### Encryption Strength
+- **Layer 1 (DTLS-SRTP)**: AES-128/256 depending on negotiation
+- **Layer 2 (Custom E2EE)**: AES-256-GCM with 128-bit auth tag
+- **Key Derivation**: HKDF-SHA256
+
+### SAS Collision Resistance
+- **Base32 Format**: 20 bits entropy (1 in 1,048,576)
+- **PGP Words**: 16 bits entropy (1 in 65,536)
+- Single guess probability for attacker
+
+---
+
+## 🌐 Browser Compatibility
+
+| Browser | Desktop Windows | Desktop Mac/Linux | Android | iOS | Notes |
+|---------|----------------|-------------------|---------|-----|-------|
+| Chrome | ⚠️ Issues* | ✅ Full | ✅ Full | ❌ No E2EE** | *Some systems block WebRTC |
+| **Edge** | ✅ Full | ✅ Full | ✅ Full | ❌ No E2EE** | **Recommended for Windows** |
+| Firefox | ✅ Full | ✅ Full | ✅ Full | ❌ No E2EE** | Good alternative |
+| Safari | ⚠️ Limited | ⚠️ Limited | N/A | ❌ No E2EE** | Basic WebRTC only |
+
+*If Chrome shows 0 ICE candidates on Windows, use Microsoft Edge instead  
+**iOS browsers use WebKit engine, lacking Insertable Streams API for double encryption
+
+### Recommended Combinations:
+- **Windows PC + Android**: Edge (PC) + Chrome (Android)
+- **Mac + Android**: Chrome/Firefox (Mac) + Chrome (Android)
+- **Linux + Android**: Chrome/Firefox (Linux) + Chrome (Android)
+- **Cross-Platform**: Firefox on both devices
+
+---
+
+## 📚 Technical Stack
+
+- **Frontend**: Vanilla JavaScript (ES6+)
+- **Styling**: Pico.css framework
+- **Crypto Libraries**: 
+  - libsodium-wrappers (X25519)
+  - kyber-crystals (Kyber KEM)
+  - WebCrypto API (AES-GCM)
+- **Build Tool**: Vite
+- **WebRTC APIs**: RTCPeerConnection, RTCRtpScriptTransform
+
+---
+
+## 🔬 Implementation Details
+
+### Double Encryption Flow
+
+1. **Key Exchange Phase**:
+   - Hybrid PQC key agreement establishes shared secret
+   - HKDF derives 256-bit master secret
+   - SAS generated for authentication
+
+2. **SAS Verification**:
+   - Users compare 4-character codes verbally
+   - On acceptance, encryption worker is activated
+
+3. **Media Encryption**:
+   - Master secret sent to Web Worker
+   - Worker derives AES-256-GCM key using HKDF
+   - RTCRtpScriptTransform intercepts media frames
+   - Each frame encrypted with unique IV (counter mode)
+   - Magic bytes mark encrypted frames
+
+4. **Frame Structure**:
+   ```
+   [Codec Header][Magic: 0xAE6153][IV: 12 bytes][Encrypted Payload + Tag]
+   ```
+
+---
+
+## 🤝 Contributing
+
+This is a proof-of-concept for educational purposes. Contributions welcome!
+
+---
+
+## ⚖️ License
+
+MIT License - See LICENSE file for details
+
+---
+
+## 🙏 Acknowledgments
+
+- NIST for PQC standardization
+- WebRTC community for Insertable Streams API
+- Paper authors from literature review
+
+---
+
+## ⚠️ Disclaimer
+
+This is a proof-of-concept implementation for academic purposes. Do not use for production without proper security audit.
+2. Open `https://*.trycloudflare.com` in **Device 2**
+3. In **Tab 1**: Click "Create Call" → Copy the Offer token
+4. In **Tab 2**: Click "Join Call" → Paste the Offer → Copy the Answer token
+5. In **Tab 1**: Paste the Answer token → Click "Connect"
+6. Both tabs should now show video from each other!
+
+## 📅 Development Progress
+
+- [x] Day 1: Foundational WebRTC Video Call
+- [x] Day 2: Hybrid Post-Quantum Key Exchange
+- [x] Day 3: MITM Detection via SAS
+- [x] Day 4: Double-Layer Encryption & Polish
+
+## 📚 References
+
+Based on academic research in post-quantum VoIP security. See `/papers` directory.
+
+
+================================================================================
+FILE: package.json
+
+================================================================================
+{
+  "name": "info_sec_sem_proj",
+  "version": "1.0.0",
+  "description": "A proof-of-concept secure VoIP solution demonstrating hybrid post-quantum cryptography, ZRTP-inspired authentication, and double-layer encryption.",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "devDependencies": {
+    "vite": "^7.2.6"
+  },
+  "dependencies": {
+    "kyber-crystals": "^1.0.7",
+    "libsodium-wrappers": "^0.7.15"
+  }
+}
+
+
+================================================================================
+FILE: src\app.js
+
+================================================================================
+/**
+ * AEGIS-VoIP - Post-Quantum Secure Communication
+ * Day 3: SAS Verification Implementation
+ */
+
+import { Crypto, CryptoUtils } from './crypto.js';
+
+// ============================================
+// Double Encryption Support (CORRECTED)
+// ============================================
+
+let encryptionWorker = null;
+
+// More precise feature detection
+const hasModernInsertableStreams = typeof RTCRtpScriptTransform !== 'undefined';
+const hasLegacyInsertableStreams = typeof RTCRtpSender !== 'undefined' && 
+                                    typeof RTCRtpSender.prototype.createEncodedStreams !== 'undefined';
+const supportsInsertableStreams = hasModernInsertableStreams || hasLegacyInsertableStreams;
+
+function initializeEncryptionWorker() {
+    if (!supportsInsertableStreams) {
+        Logger.warning('Insertable Streams not supported - double encryption unavailable');
+        return null;
+    }
+    
+    try {
+        encryptionWorker = new Worker('/src/worker.js', { name: 'AEGIS-E2EE-Worker' });
+        Logger.success('Encryption worker initialized');
+        return encryptionWorker;
+    } catch (error) {
+        Logger.error(`Failed to initialize encryption worker: ${error.message}`);
+        return null;
+    }
+}
+
+// Activate encryption by sending the key to the worker
+async function activateDoubleEncryption() {
+    if (!encryptionWorker || !state.crypto.masterSecret) {
+        Logger.warning('Cannot activate double encryption - missing worker or key');
+        return false;
+    }
+    
+    // Send master secret to worker to ENABLE encryption
+    encryptionWorker.postMessage({
+        operation: 'setKey',
+        masterSecret: state.crypto.masterSecret,
+        enabled: false
+    });
+    
+    Logger.success('🔐 Double encryption ACTIVATED with PQC-derived key');
+    return true;
+}
+
+// Deactivate encryption (for cleanup)
+function deactivateDoubleEncryption() {
+    if (encryptionWorker) {
+        encryptionWorker.postMessage({
+            operation: 'setKey',
+            masterSecret: null,
+            enabled: false
+        });
+        Logger.info('Double encryption deactivated');
+    }
+}
+
+// ============================================
+// Configuration
+// ============================================
+
+const CONFIG = {
+    iceServers: [
+        // Mix of reliable STUN servers from different providers
+        // This increases the chance of getting candidates quickly
+        { urls: 'stun:stun.l.google.com:19302' },        // Keep one Google as fallback
+        { urls: 'stun:stun.cloudflare.com:3478' },       // Cloudflare - very reliable
+        { urls: 'stun:stun.relay.metered.ca:80' },       // Metered - good uptime
+        { urls: 'stun:stun.miwifi.com:3478' },           // Xiaomi - fast
+        { urls: 'stun:stun.qq.com:3478' },               // Tencent - reliable
+        { urls: 'stun:stun.twilio.com:3478' },           // Twilio - enterprise grade
+        { urls: 'stun:stun.xirsys.com' },                // Xirsys - WebRTC focused
+        { urls: 'stun:stun.nextcloud.com:3478' },        // Nextcloud - open source
+        { urls: 'stun:relay.webwormhole.io:3478' },      // Webwormhole - P2P focused
+        { urls: 'stun:freeturn.net:3478' },              // FreeTurn - dedicated STUN/TURN
+        { urls: 'stun:stun.sipgate.net:3478' },          // Sipgate - VoIP provider
+        { urls: 'stun:stun.ekiga.net' }                  // Ekiga - open source VoIP
+    ],
+    // ICE transport policy - 'all' allows both UDP and TCP candidates
+    iceTransportPolicy: 'all',
+    // Bundle policy to multiplex media
+    bundlePolicy: 'max-bundle',
+    // RTCP multiplexing policy
+    rtcpMuxPolicy: 'require',
+    mediaConstraints: {
+        video: {
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            facingMode: 'user'
+        },
+        audio: {
+            echoCancellation: true,
+
+... [truncated - 38.0KB total]
+
+================================================================================
+FILE: src\crypto.js
+
+================================================================================
+/**
+ * AEGIS-VoIP - Crypto Module
+ * Implements Hybrid Post-Quantum Key Exchange: X25519 (ECDH) + Kyber (PQC KEM)
+ * Day 3: Added SAS generation
+ */
+
+import _sodium from 'libsodium-wrappers';
+import { kyber } from 'kyber-crystals';
+
+// ============================================
+// Utility Functions
+// ============================================
+
+const CryptoUtils = {
+    toBase64(bytes) {
+        if (!(bytes instanceof Uint8Array)) {
+            bytes = new Uint8Array(bytes);
+        }
+        let binary = '';
+        for (let i = 0; i < bytes.length; i++) {
+            binary += String.fromCharCode(bytes[i]);
+        }
+        return btoa(binary);
+    },
+
+    fromBase64(str) {
+        const binary = atob(str);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+        }
+        return bytes;
+    },
+
+    toHex(bytes) {
+        return Array.from(bytes)
+            .map(b => b.toString(16).padStart(2, '0'))
+            .join('');
+    }
+};
+
+// ============================================
+// Crypto Module State
+// ============================================
+
+let cryptoInitialized = false;
+let sodium = null;
+let Kyber = null;
+
+// ============================================
+// Initialization
+// ============================================
+
+async function initializeCrypto() {
+    if (cryptoInitialized) {
+        console.log('[Crypto] Already initialized');
+        return true;
+    }
+
+    try {
+        await _sodium.ready;
+        sodium = _sodium;
+        console.log('[Crypto] libsodium initialized');
+
+        Kyber = kyber;
+        console.log('[Crypto] Kyber initialized (using Kyber-1024)');
+
+        cryptoInitialized = true;
+        console.log('[Crypto] All crypto libraries initialized successfully');
+        return true;
+
+    } catch (error) {
+        console.error('[Crypto] Initialization failed:', error);
+        throw error;
+    }
+}
+
+// ============================================
+// X25519 (ECDH) Operations
+// ============================================
+
+function generateECDHKeyPair() {
+    if (!cryptoInitialized) throw new Error('Crypto not initialized');
+    
+    const keyPair = sodium.crypto_box_keypair();
+    return {
+        publicKey: keyPair.publicKey,
+        privateKey: keyPair.privateKey
+    };
+}
+
+function computeECDHSecret(myPrivateKey, theirPublicKey) {
+    if (!cryptoInitialized) throw new Error('Crypto not initialized');
+    return sodium.crypto_scalarmult(myPrivateKey, theirPublicKey);
+}
+
+// ============================================
+// Kyber (PQC KEM) Operations
+// ============================================
+
+async function generateKyberKeyPair() {
+    if (!cryptoInitialized) throw new Error('Crypto not initialized');
+    
+    const keyPair = await Kyber.keyPair();
+    return {
+        publicKey: new Uint8Array(keyPair.publicKey),
+        secretKey: new Uint8Array(keyPair.privateKey)
+    };
+}
+
+async function kyberEncapsulate(theirPublicKey) {
+    if (!cryptoInitialized) throw new Error('Crypto not initialized');
+    
+    const result = await Kyber.encrypt(theirPublicKey);
+    return {
+        ciphertext: new Uint8Array(result.cyphertext),
+        sharedSecret: new Uint8Array(result.secret)
+    };
+}
+
+async function kyberDecapsulate(ciphertext, mySecretKey) {
+    if (!cryptoInitialized) throw new Error('Crypto not initialized');
+    
+    const sharedSecret = await Kyber.decrypt(ciphertext, mySecretKey);
+    return new Uint8Array(sharedSecret);
+}
+
+// ============================================
+// Hybrid Key Exchange
+// ============================================
+
+async function generateHybridKeyPair() {
+    if (!cryptoInitialized) throw new Error('Crypto not initialized');
+    
+    const ecdhKeys = generateECDHKeyPair();
+    const kyberKeys = await generateKyberKeyPair();
+    
+    console.log('[Crypto] Generated hybrid key pair');
+    console.log('[Crypto] ECDH Public Key length:', ecdhKeys.publicKey.length);
+    console.log('[Crypto] Kyber Public Key length:', kyberKeys.publicKey.length);
+    
+    return {
+        ecdh: ecdhKeys,
+        kyber: kyberKeys
+    };
+}
+
+async function responderKeyAgreement(theirEcdhPk, theirKyberPk) {
+    if (!cryptoInitialized) throw new Error('Crypto not initialized');
+    
+    console.log('[Crypto] Responder performing key agreement...');
+    
+    const myEcdhKeys = generateECDHKeyPair();
+    const ecdhSecret = computeECDHSecret(myEcdhKeys.privateKey, theirEcdhPk);
+    console.log('[Crypto] ECDH secret computed, length:', ecdhSecret.length);
+    
+    const kyberResult = await kyberEncapsulate(theirKyberPk);
+    console.log('[Crypto] Kyber encapsulation done');
+    console.log('[Crypto] Kyber ciphertext length:', kyberResult.ciphertext.length);
+    console.log('[Crypto] Kyber shared secret length:', kyberResult.sharedSecret.length);
+    
+    return {
+        myEcdhPublicKey: myEcdhKeys.publicKey,
+        kyberCiphertext: kyberResult.ciphertext,
+        ecdhSecret: ecdhSecret,
+        kyberSecret: kyberResult.sharedSecret
+    };
+}
+
+async function initiatorKeyAgreement(myEcdhPrivateKey, myKyberSecretKey, theirEcdhPk, kyberCiphertext) {
+    if (!cryptoInitialized) throw new Error('Crypto not initialized');
+    
+    console.log('[Crypto] Initiator performing key agreement...');
+    
+    const ecdhSecret = computeECDHSecret(myEcdhPrivateKey, theirEcdhPk);
+    console.log('[Crypto] ECDH secret computed, length:', ecdhSecret.length);
+    
+    const kyberSecret = await kyberDecapsulate(kyberCiphertext, myKyberSecretKey);
+    console.log('[Crypto] Kyber decapsulation done, secret length:', kyberSecret.length);
+    
+    return {
+        ecdhSecret: ecdhSecret,
+        kyberSecret: kyberSecret
+    };
+}
+
+// ============================================
+// Key Derivation Function (HKDF)
+// ============================================
+
+async function hkdfExtract(salt, ikm) {
+    const keyMaterial = await crypto.subtle.importKey(
+        'raw',
+        salt.length > 0 ? salt : new Uint8Array(32),
+        { name: 'HMAC', hash: 'SHA-256' },
+        false,
+        ['sign']
+    );
+    const prk = await crypto.subtle.sign('HMAC', keyMaterial, ikm);
+    return new Uint8Array(prk);
+}
+
+async function hkdfExpand(prk, info, length) {
+    const prkKey = await crypto.subtle.importKey(
+        'raw',
+        prk,
+        { name: 'HMAC', hash: 'SHA-256' },
+        false,
+        ['sign']
+    );
+    
+    const n = Math.ceil(length / 32);
+    const okm = new Uint8Array(n * 32);
+    let prev = new Uint8Array(0);
+    
+    for (let i = 0; i < n; i++) {
+        const input = new Uint8Array(prev.length + info.length + 1);
+        input.set(prev);
+        input.set(info, prev.length);
+        input[input.length - 1] = i + 1;
+        
+        const block = await crypto.subtle.sign('HMAC', prkKey, input);
+        prev = new Uint8Array(block);
+        okm.set(prev, i * 32);
+    }
+    
+    return okm.slice(0, length);
+}
+
+async function deriveMasterSecret(ecdhSecret, kyberSecret) {
+    console.log('[Crypto] Deriving master secret...');
+    
+    const ikm = new Uint8Array(ecdhSecret.length + kyberSecret.length);
+    ikm.set(ecdhSecret, 0);
+    ikm.set(kyberSecret, ecdhSecret.length);
+    
+    const info = new TextEncoder().encode('AEGIS-VoIP-v1-Master-Secret');
+    const prk = await hkdfExtract(new Uint8Array(0), ikm);
+    const masterSecret = await hkdfExpand(prk, info, 32);
+    
+    console.log('[Crypto] Master secret derived, length:', masterSecret.length);
+    console.log('[Crypto] Master secret (hex):', CryptoUtils.toHex(masterSecret));
+    
+    return masterSecret;
+}
+
+// ============================================
+// DAY 3: Short Authentication String (SAS)
+// ============================================
+
+const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+
+const PGP_WORDS_EVEN = [
+    "aardvark", "absurd", "accrue", "acme", "adrift", "adult", "afflict", "ahead",
+    "aimless", "Algol", "allow", "almost", "ammo", "ancient", "apple", "artist",
+    "assume", "Athens", "atlas", "Aztec", "baboon", "backfield", "backward", "banjo",
+    "beaming", "bedlamp", "beehive", "beeswax", "befriend", "Belfast", "berserk", "billiard",
+    "bison", "blackjack", "blockade", "blowtorch", "bluebird", "bombast", "bookshelf", "brackish",
+    "breadline", "breakup", "brickyard", "briefcase", "Burbank", "button", "buzzard", "cement",
+    "chairlift", "chatter", "checkup", "chisel", "choking", "chopper", "Christmas", "clamshell",
+    "classic", "classroom", "cleanup", "clockwork", "cobra", "commence", "concert", "cowbell",
+    "crackdown", "cranky", "crowfoot", "crucial", "crumpled", "crusade", "cubic", "dashboard",
+    "deadbolt", "deckhand", "dogsled", "dragnet", "drainage", "dreadful", "drifter", "dromedary",
+    "drumbeat", "drunken", "Dupont", "dwelling", "eating", "edict", "egghead", "eightball",
+    "endorse", "endow", "enlist", "erase", "escape", "exceed", "eyeglass", "eyetooth",
+    "facial", "fallout", "flagpole", "flatfoot", "flytrap", "fracture", "framework", "freedom",
+    "frighten", "gazelle", "Geiger", "glitter", "glucose", "goggles", "goldfish", "gremlin",
+    "guidance", "hamlet", "highchair", "hockey", "indoors", "indulge", "inverse", "involve",
+    "island", "jawbone", "keyboard", "kickoff", "kiwi", "klaxon", "locale", "lockup",
+    "merit", "minnow", "miser", "Mohawk", "mural", "music", "necklace", "Neptune",
+    "newborn", "nightbird", "Oakland", "obtuse", "offload", "optic", "orca", "payday",
+    "peachy", "pheasant", "physique", "playhouse", "Pluto", "preclude", "prefer", "preshrunk",
+    "printer", "prowler", "pupil", "puppy", "python", "quadrant", "quiver", "quota",
+    "ragtime", "ratchet", "rebirth", "reform", "regain", "reindeer", "rematch", "repay",
+    "retouch", "revenge", "reward", "rhythm", "ribcage", "ringbolt", "robust", "rocker",
+    "ruffled", "sailboat", "sawdust", "scallion", "scenic", "scorecard", "Scotland", "seabird",
+    "select", "sentence", "shadow", "shamrock", "showgirl", "skullcap", "skydive", "slingshot",
+    "slowdown", "snapline", "snapshot", "snowcap", "snowslide", "solo", "southward", "soybean",
+    "spaniel", "spearhead", "spellbound", "spheroid", "spigot", "spindle", "spyglass", "stagehand",
+    "stagnate", "stairway", "standard", "stapler", "steamship", "sterling", "stockman", "stopwatch",
+    "stormy", "stranger", "streamline", "striking", "stubborn", "stupendous", "Stuttgart", "subway",
+    "surmount", "suspense", "sweatband", "swelter", "tactics", "talon", "tapeworm", "tempest",
+    "tiger", "tissue", "tonic", "topmost", "tracker", "transit", "trauma", "treadmill",
+    "Trojan", "trouble", "tumor", "tunnel", "tycoon", "uncut", "unearth", "unwind",
+    "uproot", "upset", "upshot", "vapor", "village", "virus", "Vulcan", "waffle",
+    "wallet", "watchword", "wayside", "willow", "woodlark", "Zulu"
+];
+
+const PGP_WORDS_ODD = [
+    "adroitness", "adviser", "aftermath", "aggregate", "alkali", "almighty", "amulet", "amusement",
+    "antenna", "applicant", "Apollo", "armistice", "article", "asteroid", "Atlantic", "atmosphere",
+    "autopsy", "Babylon", "backwater", "barbecue", "belowground", "bifocals", "bodyguard", "bookseller",
+    "borderline", "bottomless", "Bradbury", "bravado", "Brazilian", "breakaway", "Burlington", "businessman",
+    "butterfat", "Camelot", "candidate", "cannonball", "Capricorn", "caravan", "caretaker", "celebrate",
+    "cellulose", "certify", "chambermaid", "Cherokee", "Chicago", "clergyman", "coherence", "combustion",
+    "commando", "company", "component", "concurrent", "confidence", "conformist", "congregate", "consensus",
+    "consulting", "corporate", "corrosion", "councilman", "crossover", "crucifix", "cumbersome", "customer",
+    "Dakota", "decadence", "December", "decimal", "designing", "detector", "detergent", "determine",
+    "dictator", "dinosaur", "direction", "disbelief", "disruptive", "distortion", "document", "embezzle",
+    "embroider", "emerald", "emission", "emphasize", "employer", "endeavor", "envelope", "escapade",
+    "Ede", "everyday", "examine", "existence", "exodus", "fascinate", "filament", "finicky",
+    "forever", "fortitude", "frequency", "gadgetry", "Galveston", "getaway", "glossary", "gossamer",
+    "graduate", "gravity", "guitarist", "hamburger", "Hamilton", "handiwork", "hazardous", "headwaters",
+    "hemisphere", "hesitate", "hideaway", "holiness", "hurricane", "hydraulic", "impartial", "impetus",
+    "inception", "indigo", "inertia", "infancy", "inferno", "informant", "insincere", "insurgent",
+    "integrate", "intention", "inventive", "Istanbul", "Jamaica", "judiciary", "Junction", "Kentucky",
+    "kindergarten", "leadership", "legacy", "liberation", "liability", "likelihood", "literature", "livelihood",
+    "longitude", "Louisiana", "lucrative", "lymphoma", "magazine", "malady", "manageable", "mandate",
+    "Manitoba", "marathon", "medusa", "megaton", "microscope", "microwave", "midsummer", "millionaire",
+    "miracle", "misnomer", "molasses", "molecule", "Montana", "monument", "mosquito", "narrative",
+    "nebula", "newsletter", "Norwegian", "October", "Ohio", "onlooker", "opulent", "Orlando",
+    "outfielder", "Pacific", "pandemic", "Pandora", "paperweight", "paragon", "paragraph", "paramount",
+    "passenger", "pedigree", "Pegasus", "penetrate", "perceptive", "performance", "pharmacy", "phonetic",
+    "photograph", "pioneer", "pocketful", "politeness", "positive", "potato", "processor", "provincial",
+    "proximate", "puberty", "publisher", "pyramid", "quantity", "racketeer", "rebellion", "recipe",
+    "recover", "redirect", "repellent", "replica", "reproduce", "resistor", "responsive", "retraction",
+    "retrieval", "retrospect", "revenue", "revival", "revolver", "sandalwood", "sardonic", "Saturday",
+    "savagery", "scavenger", "sensation", "sociable", "souvenir", "specialist", "speculate", "stethoscope",
+    "stupidity", "subscriber", "subterfuge", "suggestion", "supernova", "surrender", "suspicious", "sympathy",
+    "tambourine", "telephone", "therapist", "tobacco", "tolerance", "tomorrow", "torpedo", "tradition",
+    "travesty", "trombonist", "truncated", "typewriter", "ultimate", "undaunted", "underfoot", "unicorn",
+    "unify", "universe", "unravel", "upcoming", "vacancy", "vagabond", "vertigo", "Virginia",
+    "visitor", "vocalist", "voyager", "warranty", "Waterloo", "whimsical", "Wichita", "Wilmington",
+    "Wyoming", "yesteryear", "Yucatan", "Yugoslav"
+];
+
+async function generateSAS(masterSecret, initiatorEcdhPk, responderEcdhPk, initiatorKyberPk, responderKyberPk) {
+    console.log('[Crypto] Generating SAS...');
+    
+    const dataToHash = new Uint8Array([
+        ...masterSecret,
+        ...initiatorEcdhPk,
+        ...responderEcdhPk,
+        ...initiatorKyberPk,
+        ...responderKyberPk
+    ]);
+    
+    console.log('[Crypto] SAS input data length:', dataToHash.length);
+    
+    const hashBuffer = await crypto.subtle.digest('SHA-256', dataToHash);
+    const hashArray = new Uint8Array(hashBuffer);
+    
+    const first20Bits = (hashArray[0] << 12) | (hashArray[1] << 4) | (hashArray[2] >> 4);
+    const byte0 = hashArray[0];
+    const byte1 = hashArray[1];
+    
+    const base32 = encodeBase32_20bit(first20Bits);
+    const word1 = PGP_WORDS_EVEN[byte0] || "unknown";
+    const word2 = PGP_WORDS_ODD[byte1] || "unknown";
+    const words = `${word1} ${word2}`;
+    const numeric = ((hashArray[0] << 8) | hashArray[1]).toString().padStart(5, '0').substring(0, 4);
+    
+    console.log('[Crypto] SAS generated:', { base32, words, numeric });
+    
+    return { base32, words, numeric };
+}
+
+function encodeBase32_20bit(bits20) {
+    let result = '';
+    for (let i = 3; i >= 0; i--) {
+        const index = (bits20 >> (i * 5)) & 0x1F;
+        result += BASE32_ALPHABET[index];
+    }
+    return result;
+}
+
+// ============================================
+// Public API
+// ============================================
+
+const Crypto = {
+    initialize: initializeCrypto,
+    isInitialized: () => cryptoInitialized,
+    generateHybridKeyPair,
+    responderKeyAgreement,
+    initiatorKeyAgreement,
+    deriveMasterSecret,
+    generateSAS,
+};
+
+export { Crypto, CryptoUtils };
+
+================================================================================
+FILE: src\worker.js
+
+================================================================================
+/**
+ * AEGIS-VoIP - Encryption Worker (SIMPLIFIED - NO HEADER PRESERVATION)
+ */
+
+'use strict';
+
+let encryptionKey = null;
+let isEncryptionEnabled = false;
+let frameCounter = 0;
+
+// Constants
+const IV_LENGTH = 12;
+const MAGIC_BYTES = new Uint8Array([0xAE, 0x61, 0x53]);
+
+async function deriveEncryptionKey(masterSecret) {
+    const keyMaterial = await crypto.subtle.importKey(
+        'raw',
+        masterSecret,
+        { name: 'HKDF' },
+        false,
+        ['deriveKey']
+    );
+
+    return await crypto.subtle.deriveKey(
+        {
+            name: 'HKDF',
+            hash: 'SHA-256',
+            salt: new TextEncoder().encode('AEGIS-VoIP-E2EE-v1'),
+            info: new TextEncoder().encode('frame-encryption-key')
+        },
+        keyMaterial,
+        { name: 'AES-GCM', length: 256 },
+        false,
+        ['encrypt', 'decrypt']
+    );
+}
+
+function generateIV(counter) {
+    const iv = new Uint8Array(IV_LENGTH);
+    const view = new DataView(iv.buffer);
+    view.setUint32(0, 0xAE615000);
+    view.setBigUint64(4, BigInt(counter));
+    return iv;
+}
+
+async function encryptFrame(encodedFrame, controller) {
+    if (!encryptionKey || !isEncryptionEnabled) {
+        controller.enqueue(encodedFrame);
+        return;
+    }
+
+    try {
+        const data = new Uint8Array(encodedFrame.data);
+        
+        // Skip tiny frames
+        if (data.length < 10) {
+            controller.enqueue(encodedFrame);
+            return;
+        }
+        
+        const iv = generateIV(frameCounter++);
+        
+        // Encrypt ENTIRE frame data - no header preservation
+        const encrypted = await crypto.subtle.encrypt(
+            { name: 'AES-GCM', iv: iv },
+            encryptionKey,
+            data
+        );
+        
+        // Create new frame: [magic][iv][encrypted]
+        const newData = new Uint8Array(MAGIC_BYTES.length + IV_LENGTH + encrypted.byteLength);
+        newData.set(MAGIC_BYTES, 0);
+        newData.set(iv, MAGIC_BYTES.length);
+        newData.set(new Uint8Array(encrypted), MAGIC_BYTES.length + IV_LENGTH);
+        
+        encodedFrame.data = newData.buffer;
+    } catch (error) {
+        console.error('[Worker] Encrypt error:', error);
+    }
+    
+    controller.enqueue(encodedFrame);
+}
+
+async function decryptFrame(encodedFrame, controller) {
+    if (!encryptionKey || !isEncryptionEnabled) {
+        controller.enqueue(encodedFrame);
+        return;
+    }
+
+    try {
+        const data = new Uint8Array(encodedFrame.data);
+        
+        // Check for magic bytes
+        if (data.length < MAGIC_BYTES.length + IV_LENGTH + 16) {
+            controller.enqueue(encodedFrame);
+            return;
+        }
+        
+        let hasMagic = true;
+        for (let i = 0; i < MAGIC_BYTES.length; i++) {
+            if (data[i] !== MAGIC_BYTES[i]) {
+                hasMagic = false;
+                break;
+            }
+        }
+        
+        if (!hasMagic) {
+            controller.enqueue(encodedFrame);
+            return;
+        }
+        
+        const iv = data.slice(MAGIC_BYTES.length, MAGIC_BYTES.length + IV_LENGTH);
+        const encrypted = data.slice(MAGIC_BYTES.length + IV_LENGTH);
+        
+        const decrypted = await crypto.subtle.decrypt(
+            { name: 'AES-GCM', iv: iv },
+            encryptionKey,
+            encrypted
+        );
+        
+        encodedFrame.data = decrypted;
+        controller.enqueue(encodedFrame);
+    } catch (error) {
+        console.error('[Worker] Decrypt error:', error);
+        // Drop corrupted frame
+    }
+}
+
+function handleTransform(operation, readable, writable) {
+    const transform = operation === 'encode' ? encryptFrame : decryptFrame;
+    
+    const transformStream = new TransformStream({
+        transform: transform
+    });
+    
+    readable.pipeThrough(transformStream).pipeTo(writable);
+}
+
+self.onmessage = async (event) => {
+    const { operation } = event.data;
+    
+    if (operation === 'setKey') {
+        const { masterSecret, enabled } = event.data;
+        if (masterSecret) {
+            encryptionKey = await deriveEncryptionKey(masterSecret);
+            isEncryptionEnabled = enabled !== false;
+            frameCounter = 0;
+            console.log('[Worker] Encryption', isEncryptionEnabled ? 'enabled' : 'disabled');
+        } else {
+            encryptionKey = null;
+            isEncryptionEnabled = false;
+        }
+    } else if (operation === 'encode' || operation === 'decode') {
+        if (event.data.readable && event.data.writable) {
+            handleTransform(operation, event.data.readable, event.data.writable);
+        }
+    }
+};
+
+if (self.RTCTransformEvent) {
+    self.onrtctransform = (event) => {
+        const transformer = event.transformer;
+        handleTransform(transformer.options.operation, transformer.readable, transformer.writable);
+    };
+}
+
+console.log('[Worker] Ready (simplified version)');
+
+================================================================================
+FILE: vite.config.js
+
+================================================================================
+import { defineConfig } from 'vite'
+
+export default defineConfig({
+  server: {
+    host: true, // Listen on all addresses
+    allowedHosts: [
+      '.trycloudflare.com', // Allow all Cloudflare tunnel subdomains
+      'localhost',
+      '127.0.0.1',
+      '.ngrok-free.dev'
+    ]
+  }
+})
+
+
+================================================================================
+FILE: package-lock.json
+
+================================================================================
+[JSON file: 33.7KB]
+
+{
+  "name": 'info_sec_sem_proj',
+  "version": '1.0.0',
+  "lockfileVersion": 3,
+  "requires": True,
+  "packages": {
+    "": {
+      "name": 'info_sec_sem_proj',
+      "version": '1.0.0',
+      "license": 'ISC',
+      "dependencies": {
+        "kyber-crystals": '^1.0.7',
+        "libsodium-wrappers": '^0.7.15',
+        "ws": '^8.18.0',
+      },
+      "devDependencies": {
+        "vite": '^7.2.6',
+      },
+    },
+    "node_modules/@esbuild/aix-ppc64": {
+      "version": '0.25.12',
+      "resolved": "https://registry.npmjs.org/@esbuild/aix-ppc64/-/aix-ppc64-0....",
+      "integrity": "sha512-Hhmwd6CInZ3dwpuGTF8fJG6yoWmsToE+vYgD4nytZVxcu1ulHpUQR...",
+      "cpu": ['ppc64'],
+      "dev": True,
+      ... +4 more keys
+    },
+    "node_modules/@esbuild/android-arm": {
+      "version": '0.25.12',
+      "resolved": "https://registry.npmjs.org/@esbuild/android-arm/-/android-ar...",
+      "integrity": "sha512-VJ+sKvNA/GE7Ccacc9Cha7bpS8nyzVv0jdVgwNDaR4gDMC/2TTRc3...",
+      "cpu": ['arm'],
+      "dev": True,
+      ... +4 more keys
+    },
+    "node_modules/@esbuild/android-arm64": {
+      "version": '0.25.12',
+      "resolved": "https://registry.npmjs.org/@esbuild/android-arm64/-/android-...",
+      "integrity": "sha512-6AAmLG7zwD1Z159jCKPvAxZd4y/VTO0VkprYy+3N2FtJ8+BQWFXU+...",
+      "cpu": ['arm64'],
+      "dev": True,
+      ... +4 more keys
+    },
+    "node_modules/@esbuild/android-x64": {
+      "version": '0.25.12',
+      "resolved": "https://registry.npmjs.org/@esbuild/android-x64/-/android-x6...",
+      "integrity": "sha512-5jbb+2hhDHx5phYR2By8GTWEzn6I9UqR11Kwf22iKbNpYrsmRB18a...",
+      "cpu": ['x64'],
+      "dev": True,
+      ... +4 more keys
+    },
+    ... +60 more keys
+  },
+}
+
+# Top-level keys: ['name', 'version', 'lockfileVersion', 'requires', 'packages']
+
+================================================================================
+FILE: .gitignore
+
+================================================================================
+# Dependencies
+node_modules/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Build outputs
+dist/
+build/
+
+
+================================================================================
+FILE: index.html
+
+================================================================================
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AEGIS-VoIP | Secure Communication</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
+    <link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+    <main class="container">
+        <!-- Navigation Header -->
+        <nav>
+            <ul>
+                <li><strong>🛡️ AEGIS-VoIP</strong></li>
+            </ul>
+            <ul>
+                <li id="connection-state">Not Connected</li>
+                <li>
+                    <span id="security-indicator" class="indicator disconnected" title="Security Status">
+                        <span class="indicator-dot"></span>
+                        <span class="indicator-text">Disconnected</span>
+                    </span>
+                </li>
+            </ul>
+        </nav>
+
+        <!-- Video Display Area -->
+        <section id="video-section">
+            <div id="videos">
+                <figure class="video-container">
+                    <video id="localVideo" autoplay muted playsinline></video>
+                    <figcaption>
+                        <span class="video-label">You (Local)</span>
+                    </figcaption>
+                </figure>
+                <figure class="video-container">
+                    <video id="remoteVideo" autoplay playsinline></video>
+                    <figcaption>
+                        <span class="video-label">Remote Peer</span>
+                    </figcaption>
+                    <div id="remote-placeholder">
+                        <span>Waiting for connection...</span>
+                    </div>
+                </figure>
+            </div>
+        </section>
+
+        <!-- Call Controls -->
+        <section id="controls-section">
+            <div id="call-controls">
+                <button id="createCallBtn" class="primary">
+                    📞 Create Call
+                </button>
+                <button id="joinCallBtn" class="secondary">
+                    📲 Join Call
+                </button>
+                <button id="hangupBtn" class="contrast" disabled>
+                    ❌ Hang Up
+                </button>
+            </div>
+            
+            <!-- Media Controls -->
+            <div id="media-controls" class="hidden">
+                <button id="toggleVideoBtn" class="outline" title="Toggle Video">
+                    📹 Video On
+                </button>
+                <button id="toggleAudioBtn" class="outline" title="Toggle Audio">
+                    🎤 Mic On
+                </button>
+            </div>
+        </section>
+
+        <!-- Instructions Panel -->
+        <section id="instructions-section">
+            <details open>
+                <summary>📋 How to Use (Manual Signaling)</summary>
+                <div class="instructions-content">
+                    <div class="instruction-step">
+                        <span class="step-number">1</span>
+                        <div>
+                            <strong>Peer A:</strong> Click "Create Call" to generate an Offer token
+                        </div>
+                    </div>
+                    <div class="instruction-step">
+                        <span class="step-number">2</span>
+                        <div>
+                            <strong>Peer A:</strong> Copy the Offer token and send it to Peer B
+                        </div>
+                    </div>
+                    <div class="instruction-step">
+                        <span class="step-number">3</span>
+                        <div>
+                            <strong>Peer B:</strong> Click "Join Call" and paste the Offer token
+                        </div>
+                    </div>
+                    <div class="instruction-step">
+                        <span class="step-number">4</span>
+                        <div>
+                            <strong>Peer B:</strong> Copy the Answer token and send it back to Peer A
+                        </div>
+                    </div>
+                    <div class="instruction-step">
+                        <span class="step-number">5</span>
+                        <div>
+                            <strong>Peer A:</strong> Paste the Answer token to establish connection
+                        </div>
+                    </div>
+                </div>
+            </details>
+        </section>
+
+        <!-- Debug Console (Optional) -->
+        <section id="debug-section">
+            <details>
+                <summary>🔧 Debug Console</summary>
+                <div id="debug-log"></div>
+                <button id="clearLogBtn" class="outline contrast small">Clear Log</button>
+            </details>
+        </section>
+
+        <!-- Modal for Signaling: Create Call (Peer A - Step 1) -->
+        <dialog id="offer-modal">
+            <article>
+                <header>
+                    <a href="#" aria-label="Close" class="close" data-close-modal></a>
+                    <h2>� Offer Created</h2>
+                </header>
+                <p>Copy this Offer token and send it to the person you want to call:</p>
+                <div class="token-container">
+                    <textarea id="offer-display" readonly rows="6" placeholder="Generating offer..."></textarea>
+                    <button id="copy-offer-btn" class="outline">📋 Copy to Clipboard</button>
+                </div>
+                <hr>
+                <p>Once they send back their Answer token, paste it here:</p>
+                <div class="token-container">
+                    <textarea id="answer-input" rows="4" placeholder="Paste Answer token here..."></textarea>
+                </div>
+                <footer>
+                    <button id="cancel-offer-btn" class="secondary" data-close-modal>Cancel Call</button>
+                    <button id="connect-btn" class="primary">🔗 Connect</button>
+                </footer>
+            </article>
+        </dialog>
+
+        <!-- Modal for Signaling: Join Call (Peer B) -->
+        <dialog id="join-modal">
+            <article>
+                <header>
+                    <a href="#" aria-label="Close" class="close" data-close-modal></a>
+                    <h2>📥 Join a Call</h2>
+                </header>
+                <p>Paste the Offer token you received:</p>
+                <div class="token-container">
+                    <textarea id="offer-input" rows="6" placeholder="Paste Offer token here..."></textarea>
+                </div>
+                <footer>
+                    <button class="secondary" data-close-modal>Cancel</button>
+                    <button id="process-offer-btn" class="primary">Process Offer</button>
+                </footer>
+            </article>
+        </dialog>
+
+        <!-- Modal for Answer Display (Peer B - Step 2) -->
+        <dialog id="answer-modal">
+            <article>
+                <header>
+                    <a href="#" aria-label="Close" class="close" data-close-modal></a>
+                    <h2>📤 Answer Created</h2>
+                </header>
+                <p>Copy this Answer token and send it back to the caller:</p>
+                <div class="token-container">
+                    <textarea id="answer-display" readonly rows="6" placeholder="Generating answer..."></textarea>
+                    <button id="copy-answer-btn" class="outline">📋 Copy to Clipboard</button>
+                </div>
+                <p class="info-text">
+                    ℹ️ The call will connect automatically once the caller processes your answer.
+                </p>
+                <footer>
+                    <button id="answer-done-btn" class="primary">Done</button>
+                </footer>
+            </article>
+        </dialog>
+
+        <!-- Modal for SAS Verification (Day 3) -->
+        <dialog id="sas-modal">
+            <article>
+                <header>
+                    <h2>🔒 Security Verification</h2>
+                </header>
+                <p>Verbally compare this Short Authentication String (SAS) with your peer. If it matches exactly, click Accept to secure the call.</p>
+                <div id="sas-display">
+                    <span id="sas-code">----</span>
+                </div>
+                <p class="warning-text">
+                    ⚠️ If the codes don't match, you may be under a Man-in-the-Middle attack!
+                </p>
+                <footer>
+                    <button id="sas-reject" class="secondary">❌ Reject</button>
+                    <button id="sas-accept" class="primary">✅ Accept</button>
+                </footer>
+            </article>
+        </dialog>
+
+    </main>
+
+    <footer class="container">
+        <small>
+            <span>AEGIS-VoIP Proof of Concept</span> • 
+            <span>Post-Quantum Secure Communication</span> •
+            <span id="version">v0.2.0 (Day 2)</span>
+        </small>
+    </footer>
+
+    <script type="module" src="/src/app.js"></script>
+</body>
+</html>
+
+
+================================================================================
+FILE: src\style.css
+
+================================================================================
+/* ============================================
+   AEGIS-VoIP - Custom Styles
+   ============================================ */
+
+:root {
+    --aegis-primary: #4dabf7;
+    --aegis-success: #51cf66;
+    --aegis-warning: #fcc419;
+    --aegis-danger: #ff6b6b;
+    --aegis-dark: #1a1a2e;
+    --aegis-darker: #16213e;
+    --aegis-border: #2d3748;
+}
+
+/* Global Adjustments */
+body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+main.container {
+    flex: 1;
+    padding-top: 1rem;
+}
+
+footer.container {
+    text-align: center;
+    padding: 1rem;
+    opacity: 0.7;
+}
+
+/* ============================================
+   Navigation & Security Indicator
+   ============================================ */
+
+nav {
+    border-bottom: 1px solid var(--aegis-border);
+    padding-bottom: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+#connection-state {
+    font-size: 0.85rem;
+    opacity: 0.8;
+}
+
+.indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 2rem;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.indicator-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.indicator.disconnected {
+    background: rgba(128, 128, 128, 0.2);
+}
+.indicator.disconnected .indicator-dot {
+    background: #888;
+    animation: none;
+}
+
+.indicator.connecting {
+    background: rgba(252, 196, 25, 0.2);
+}
+.indicator.connecting .indicator-dot {
+    background: var(--aegis-warning);
+}
+
+.indicator.connected {
+    background: rgba(77, 171, 247, 0.2);
+}
+.indicator.connected .indicator-dot {
+    background: var(--aegis-primary);
+}
+
+.indicator.unverified {
+    background: rgba(255, 107, 107, 0.2);
+}
+.indicator.unverified .indicator-dot {
+    background: var(--aegis-danger);
+}
+
+.indicator.verified {
+    background: rgba(81, 207, 102, 0.2);
+}
+.indicator.verified .indicator-dot {
+    background: var(--aegis-success);
+}
+
+.indicator.verified-e2ee {
+    background: linear-gradient(135deg, rgba(81, 207, 102, 0.3), rgba(77, 171, 247, 0.3));
+    border: 1px solid var(--aegis-success);
+}
+.indicator.verified-e2ee .indicator-dot {
+    background: var(--aegis-success);
+    box-shadow: 0 0 10px var(--aegis-success);
+    animation: pulse-e2ee 1.5s infinite;
+}
+.indicator.verified-e2ee .indicator-text::after {
+    content: ' 🔐';
+}
+
+@keyframes pulse-e2ee {
+    0%, 100% { 
+        opacity: 1; 
+        box-shadow: 0 0 10px var(--aegis-success);
+    }
+    50% { 
+        opacity: 0.6; 
+        box-shadow: 0 0 20px var(--aegis-success);
+    }
+}
+
+/* ============================================
+   Video Section
+   ============================================ */
+
+#video-section {
+    margin-bottom: 1.5rem;
+}
+
+#videos {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+@media (max-width: 768px) {
+    #videos {
+        grid-template-columns: 1fr;
+    }
+}
+
+.video-container {
+    position: relative;
+    margin: 0;
+    background: var(--aegis-darker);
+    border-radius: 0.75rem;
+    overflow: hidden;
+    border: 2px solid var(--aegis-border);
+    transition: border-color 0.3s ease;
+}
+
+.video-container:hover {
+    border-color: var(--aegis-primary);
+}
+
+.video-container video {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    display: block;
+    background: #000;
+}
+
+.video-container figcaption {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 0.5rem;
+    background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
+    text-align: center;
+}
+
+.video-label {
+    font-size: 0.85rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+#remote-placeholder {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--aegis-darker);
+    color: #666;
+    font-size: 0.9rem;
+}
+
+#remote-placeholder.hidden {
+    display: none;
+}
+
+/* ============================================
+   Controls Section
+   ============================================ */
+
+#controls-section {
+    margin-bottom: 1.5rem;
+}
+
+#call-controls {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+}
+
+#call-controls button {
+    min-width: 140px;
+}
+
+#media-controls {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: center;
+}
+
+#media-controls.hidden {
+    display: none;
+}
+
+#media-controls button {
+    font-size: 0.9rem;
+    padding: 0.5rem 1rem;
+}
+
+#media-controls button.muted {
+    opacity: 0.6;
+    text-decoration: line-through;
+}
+
+/* ============================================
+   Instructions Section
+   ============================================ */
+
+#instructions-section {
+    margin-bottom: 1.5rem;
+}
+
+#instructions-section details {
+    background: var(--aegis-darker);
+    border-radius: 0.5rem;
+    border: 1px solid var(--aegis-border);
+}
+
+#instructions-section summary {
+    padding: 1rem;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.instructions-content {
+    padding: 0 1rem 1rem;
+}
+
+.instruction-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--aegis-border);
+}
+
+.instruction-step:last-child {
+    border-bottom: none;
+}
+
+.step-number {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--aegis-primary);
+    color: #000;
+    border-radius: 50%;
+    font-weight: bold;
+    font-size: 0.85rem;
+}
+
+/* ============================================
+   Debug Section
+   ============================================ */
+
+#debug-section {
+    margin-bottom: 1rem;
+}
+
+#debug-section details {
+    background: var(--aegis-darker);
+    border-radius: 0.5rem;
+    border: 1px solid var(--aegis-border);
+}
+
+#debug-section summary {
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
+#debug-log {
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 0.5rem 1rem;
+    font-family: monospace;
+    font-size: 0.8rem;
+    background: #0d1117;
+    border-radius: 0.25rem;
+    margin: 0 1rem;
+}
+
+#debug-log .log-entry {
+    padding: 0.25rem 0;
+    border-bottom: 1px solid #21262d;
+}
+
+#debug-log .log-entry:last-child {
+    border-bottom: none;
+}
+
+#debug-log .log-time {
+    color: #8b949e;
+    margin-right: 0.5rem;
+}
+
+#debug-log .log-info { color: #58a6ff; }
+#debug-log .log-success { color: #3fb950; }
+#debug-log .log-warning { color: #d29922; }
+#debug-log .log-error { color: #f85149; }
+
+#clearLogBtn {
+    margin: 0.5rem 1rem 1rem;
+    padding: 0.35rem 0.75rem;
+    font-size: 0.8rem;
+}
+
+/* ============================================
+   Modal Dialogs
+   ============================================ */
+
+dialog {
+    max-width: 600px;
+    width: 90%;
+}
+
+dialog article {
+    margin: 0;
+}
+
+dialog header {
+    padding: 1.5rem 1.5rem 1rem;
+}
+
+dialog header h2 {
+    margin: 0;
+}
+
+dialog article > p,
+dialog article > div,
+dialog article > hr {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+}
+
+dialog footer {
+    padding: 1rem 1.5rem 1.5rem;
+    display: flex;
+    gap: 0.75rem;
+    justify-content: flex-end;
+}
+
+.token-container {
+    margin-bottom: 1rem;
+    padding: 0 1.5rem;
+}
+
+.token-container textarea {
+    font-family: monospace;
+    font-size: 0.75rem;
+    resize: vertical;
+    background: #0d1117;
+    border-color: var(--aegis-border);
+}
+
+.token-container button {
+    margin-top: 0.5rem;
+    width: 100%;
+}
+
+.info-text {
+    font-size: 0.9rem;
+    opacity: 0.8;
+    font-style: italic;
+}
+
+.warning-text {
+    font-size: 0.9rem;
+    color: var(--aegis-warning);
+}
+
+/* ============================================
+   SAS Modal
+   ============================================ */
+
+#sas-display {
+    text-align: center;
+    padding: 2rem;
+    margin: 1rem 1.5rem;
+    background: var(--aegis-darker);
+    border-radius: 0.5rem;
+    border: 2px dashed var(--aegis-primary);
+}
+
+#sas-code {
+    font-family: 'Courier New', monospace;
+    font-size: 2.5rem;
+    font-weight: bold;
+    letter-spacing: 0.3em;
+    color: var(--aegis-primary);
+}
+
+/* ============================================
+   Utility Classes
+   ============================================ */
+
+.hidden {
+    display: none !important;
+}
+
+.small {
+    font-size: 0.85rem;
+    padding: 0.5rem 1rem;
+}
+
+/* Copy success animation */
+@keyframes copySuccess {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+.copy-success {
+    animation: copySuccess 0.3s ease;
+    background: var(--aegis-success) !important;
+}
+
+/* ============================================
+   DAY 3: SAS Verification Styles
+   ============================================ */
+
+.sas-base32 {
+    font-size: 3rem;
+    font-weight: bold;
+    font-family: 'Courier New', monospace;
+    letter-spacing: 0.3em;
+    color: var(--aegis-primary);
+    margin-bottom: 0.5rem;
+}
+
+.sas-words {
+    font-size: 1.2rem;
+    font-style: italic;
+    color: var(--muted-color);
+    text-transform: capitalize;
+}
+
+#sas-modal article {
+    text-align: center;
+}
+
+#sas-modal header h2 {
+    color: var(--aegis-warning);
+}
+/* DAY 3: SAS Verification Styles */
+.sas-base32 {
+    font-size: 3rem;
+    font-weight: bold;
+    font-family: 'Courier New', monospace;
+    letter-spacing: 0.3em;
+    color: var(--primary);
+    margin-bottom: 0.5rem;
+}
+
+.sas-words {
+    font-size: 1.2rem;
+    font-style: italic;
+    color: var(--muted-color);
+    text-transform: capitalize;
+}
+
+#sas-modal article {
+    text-align: center;
+}
+
+#sas-modal header h2 {
+    color: var(--warning-color);
+}
+
+================================================================================
+SUMMARY
+================================================================================
+Files processed: 10
+Files skipped: 0
+Errors: 0
+Estimated tokens: ~1
