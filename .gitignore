@@ -17,3 +17,7 @@ Thumbs.db
 # Build outputs
 dist/
 build/
+
+# personal context building files
+generate_context.py
+directory_info.txt
