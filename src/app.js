@@ -925,9 +925,9 @@ function initializeEventListeners() {
         closeModal(elements.answerModal);
     });
     
-    sasAccept.addEventListener('click', async () => {
+    elements.sasAccept.addEventListener('click', async () => {
         Logger.success('SAS accepted by user');
-        sasModal.close();
+        closeModal(elements.sasModal);
         updateSecurityIndicator('verified');
 
         const activated = await activateDoubleEncryption();

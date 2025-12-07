@@ -20,7 +20,7 @@ A proof-of-concept implementation of quantum-resistant, end-to-end encrypted vid
 - Pure browser-based (no plugins/extensions)
 - Peer-to-peer communication via WebRTC
 - Works locally without any server infrastructure
-- Progressive Web App (PWA) capable
+- Cross-platform (Desktop + Mobile)
 
 ---
 
@@ -35,21 +35,21 @@ A proof-of-concept implementation of quantum-resistant, end-to-end encrypted vid
 │  ┌──────────────────────────────────────────────────────────┐  │
 │  │ AES-256-GCM Encryption (from PQC-derived key)            │  │
 │  │ - Implemented via WebRTC Insertable Streams              │  │
-│  │ - Frame-level encryption with authentication             │  │
+│  │ - Frame-level encryption with VP8 header preservation    │  │
 │  └──────────────────────────────────────────────────────────┘  │
 │                                                                 │
 │  Transport Layer:                                               │
 │  ┌──────────────────────────────────────────────────────────┐  │
 │  │ DTLS-SRTP (WebRTC built-in)                              │  │
 │  │ - Standard WebRTC encryption                             │  │
-│  │ - Provides first layer of protection                    │  │
+│  │ - Provides first layer of protection                     │  │
 │  └──────────────────────────────────────────────────────────┘  │
 │                                                                 │
 │  Key Agreement:                                                 │
 │  ┌──────────────────────────────────────────────────────────┐  │
 │  │ Hybrid PQC: X25519 + Kyber-1024                          │  │
 │  │ - Quantum-resistant key exchange                         │  │
-│  │ - 256-bit master secret derivation                       │  │
+│  │ - 256-bit master secret derivation via HKDF              │  │
 │  └──────────────────────────────────────────────────────────┘  │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
@@ -60,191 +60,180 @@ A proof-of-concept implementation of quantum-resistant, end-to-end encrypted vid
 ## 🛠️ How to Run
 
 ### Prerequisites
-- Modern browser (Chrome 90+, Firefox 117+, Edge 90+)
-- Node.js and npm (for development server)
+- Modern browser (Edge, Firefox, or Chrome)
+- Node.js and npm
 - Camera and microphone access
 
 ### Installation
 
-1. **Clone the repository:**
 ```bash
+# Clone and install
 git clone <repository-url>
 cd aegis-voip
-```
-
-2. **Install dependencies:**
-```bash
 npm install
-```
 
-3. **Start the development server:**
-```bash
+# Start development server
 npm run dev
 ```
 
-4. **Open in browser:**
-```
-http://localhost:5173
+Open `http://localhost:5173` in your browser.
+
+### Cross-Device Testing
+
+```bash
+# Terminal 1: Start Vite
+npm run dev
+
+# Terminal 2: Create tunnel
+ngrok http [port-number-from-npm-run-dev]
 ```
 
-### Making a Secure Call
+Use the generated `*.ngrok.*` URL on **both** devices.
+Make sure that ngrok has been previously already configured, if not, then configure it first.
+
+---
+
+## 📞 Making a Secure Call
+
+### Step-by-Step
 
 1. **Initiator (Peer A):**
-   - Open the application in a browser tab
-   - Click "Create Call"
+   - Open the application
+   - Click **"Create Call"**
    - Copy the Offer token
-   - Send it to Peer B (via any messenger/email)
+   - Send it to Peer B (via any messenger)
 
 2. **Responder (Peer B):**
-   - Open the application in another tab/device
-   - Click "Join Call"
-   - Paste the Offer token
-   - Copy the generated Answer token
+   - Open the application (same URL)
+   - Click **"Join Call"**
+   - Paste the Offer token → Click **"Process Offer"**
+   - Copy the Answer token
    - Send it back to Peer A
 
 3. **Initiator (Peer A):**
    - Paste the Answer token
-   - Click "Connect"
+   - Click **"Connect"**
 
 4. **Both Peers:**
-   - Verbally compare the 4-character SAS code
-   - If codes match, click "Accept"
-   - Call is now quantum-secure with double encryption!
+   - Compare the 4-character SAS code verbally
+   - If codes match, click **"Accept"**
+   - ✅ Call is now quantum-secure with double encryption!
 
 ---
 
 ## 🔐 Threat Model
 
-### Protected Against:
-- **Quantum Attacks**: Hybrid PQC protects against future quantum computers
-- **Man-in-the-Middle**: SAS verification detects active attackers
-- **Passive Eavesdropping**: Double encryption prevents wiretapping
-- **Server Compromise**: Manual signaling means no server has keys
-- **DTLS Downgrade**: Second encryption layer provides defense-in-depth
+### Protected Against
+| Threat | Protection |
+|--------|------------|
+| Quantum Attacks | Hybrid PQC (X25519 + Kyber-1024) |
+| Man-in-the-Middle | SAS verification detects active attackers |
+| Passive Eavesdropping | Double encryption prevents wiretapping |
+| Server Compromise | Manual signaling - no server has keys |
+| DTLS Downgrade | Second encryption layer provides defense-in-depth |
 
-### Limitations:
-- Cannot protect against endpoint compromise (malware)
-- Requires user vigilance for SAS comparison
-- Browser/OS vulnerabilities out of scope
-- No protection against traffic analysis
+### Out of Scope
+- Endpoint compromise (malware on device)
+- Browser/OS vulnerabilities
+- Traffic analysis attacks
+- Physical access to device
 
 ---
 
-## 📊 Security Analysis
+## 📊 Security Parameters
 
-### Key Exchange Security
-- **Classical Security**: 128-bit (X25519 ECDH)
-- **Post-Quantum Security**: NIST Level 5 (Kyber-1024)
-- **Combined Security**: Maximum of both
-
-### Encryption Strength
-- **Layer 1 (DTLS-SRTP)**: AES-128/256 depending on negotiation
-- **Layer 2 (Custom E2EE)**: AES-256-GCM with 128-bit auth tag
-- **Key Derivation**: HKDF-SHA256
-
-### SAS Collision Resistance
-- **Base32 Format**: 20 bits entropy (1 in 1,048,576)
-- **PGP Words**: 16 bits entropy (1 in 65,536)
-- Single guess probability for attacker
+| Component | Specification |
+|-----------|---------------|
+| Classical Key Exchange | X25519 (128-bit security) |
+| Post-Quantum KEM | Kyber-1024 (NIST Level 5) |
+| Key Derivation | HKDF-SHA256 |
+| Layer 1 Encryption | DTLS-SRTP (AES-128/256) |
+| Layer 2 Encryption | AES-256-GCM |
+| SAS Entropy | 20 bits (Base32) / 16 bits (PGP words) |
 
 ---
 
 ## 🌐 Browser Compatibility
 
-| Browser | Desktop Windows | Desktop Mac/Linux | Android | iOS | Notes |
-|---------|----------------|-------------------|---------|-----|-------|
-| Chrome | ⚠️ Issues* | ✅ Full | ✅ Full | ❌ No E2EE** | *Some systems block WebRTC |
-| **Edge** | ✅ Full | ✅ Full | ✅ Full | ❌ No E2EE** | **Recommended for Windows** |
-| Firefox | ✅ Full | ✅ Full | ✅ Full | ❌ No E2EE** | Good alternative |
-| Safari | ⚠️ Limited | ⚠️ Limited | N/A | ❌ No E2EE** | Basic WebRTC only |
+| Browser | Windows | macOS/Linux | Android | iOS |
+|---------|---------|-------------|---------|-----|
+| **Edge** | ✅ Recommended | ✅ | ✅ | ❌* |
+| Firefox | ✅ | ✅ | ✅ | ❌* |
+| Chrome | ⚠️ ICE issues** | ✅ | ✅ | ❌* |
+| Safari | ⚠️ Limited | ⚠️ Limited | N/A | ❌* |
 
-*If Chrome shows 0 ICE candidates on Windows, use Microsoft Edge instead  
-**iOS browsers use WebKit engine, lacking Insertable Streams API for double encryption
+*iOS browsers use WebKit, which lacks Insertable Streams API  
+**Some Windows systems block WebRTC in Chrome; use Edge instead
 
-### Recommended Combinations:
-- **Windows PC + Android**: Edge (PC) + Chrome (Android)
-- **Mac + Android**: Chrome/Firefox (Mac) + Chrome (Android)
-- **Linux + Android**: Chrome/Firefox (Linux) + Chrome (Android)
-- **Cross-Platform**: Firefox on both devices
+### Recommended Combinations
+- **Windows + Android**: Edge (PC) + Chrome (Mobile)
+- **Mac/Linux + Android**: Firefox/Chrome + Chrome (Mobile)
 
 ---
 
 ## 📚 Technical Stack
 
-- **Frontend**: Vanilla JavaScript (ES6+)
-- **Styling**: Pico.css framework
-- **Crypto Libraries**: 
-  - libsodium-wrappers (X25519)
-  - kyber-crystals (Kyber KEM)
-  - WebCrypto API (AES-GCM)
-- **Build Tool**: Vite
-- **WebRTC APIs**: RTCPeerConnection, RTCRtpScriptTransform
+| Component | Technology |
+|-----------|------------|
+| Frontend | Vanilla JavaScript (ES6+) |
+| Styling | Pico.css |
+| Build Tool | Vite |
+| Classical Crypto | libsodium-wrappers (X25519) |
+| Post-Quantum Crypto | kyber-crystals (Kyber-1024) |
+| Symmetric Crypto | WebCrypto API (AES-GCM) |
+| Real-time Comm | WebRTC APIs |
 
 ---
 
-## 🔬 Implementation Details
+## 📁 Project Structure
 
-### Double Encryption Flow
-
-1. **Key Exchange Phase**:
-   - Hybrid PQC key agreement establishes shared secret
-   - HKDF derives 256-bit master secret
-   - SAS generated for authentication
-
-2. **SAS Verification**:
-   - Users compare 4-character codes verbally
-   - On acceptance, encryption worker is activated
-
-3. **Media Encryption**:
-   - Master secret sent to Web Worker
-   - Worker derives AES-256-GCM key using HKDF
-   - RTCRtpScriptTransform intercepts media frames
-   - Each frame encrypted with unique IV (counter mode)
-   - Magic bytes mark encrypted frames
-
-4. **Frame Structure**:
-   ```
-   [Codec Header][Magic: 0xAE6153][IV: 12 bytes][Encrypted Payload + Tag]
-   ```
+```
+aegis-voip/
+├── index.html          # Main UI with modals
+├── package.json        # Dependencies
+├── vite.config.js      # Dev server config
+├── src/
+│   ├── app.js          # Main application logic
+│   ├── crypto.js       # Hybrid PQC implementation
+│   ├── worker.js       # Frame encryption worker
+│   └── style.css       # UI styling
+└── papers/             # Research references
+```
 
 ---
 
-## 🤝 Contributing
+## 📅 Development Progress
 
-This is a proof-of-concept for educational purposes. Contributions welcome!
+- [x] Day 1: Foundational WebRTC Video Call
+- [x] Day 2: Hybrid Post-Quantum Key Exchange (X25519 + Kyber)
+- [x] Day 3: MITM Detection via SAS Verification
+- [x] Day 4: Double-Layer Encryption & Polish
+
+---
+
+## 📚 References
+
+This project implements concepts from academic research in post-quantum VoIP security:
+
+- ZRTP Protocol (RFC 6189) - SAS verification
+- NIST PQC Standardization - Kyber/ML-KEM
+- WebRTC Insertable Streams - Frame-level encryption
+- Hybrid PQC schemes - Defense-in-depth
+
+See `/papers` directory for full literature review.
 
 ---
 
 ## ⚖️ License
 
-MIT License - See LICENSE file for details
-
----
-
-## 🙏 Acknowledgments
-
-- NIST for PQC standardization
-- WebRTC community for Insertable Streams API
-- Paper authors from literature review
+MIT License - See LICENSE file for details.
 
 ---
 
 ## ⚠️ Disclaimer
 
-This is a proof-of-concept implementation for academic purposes. Do not use for production without proper security audit.
-2. Open `https://*.trycloudflare.com` in **Device 2**
-3. In **Tab 1**: Click "Create Call" → Copy the Offer token
-4. In **Tab 2**: Click "Join Call" → Paste the Offer → Copy the Answer token
-5. In **Tab 1**: Paste the Answer token → Click "Connect"
-6. Both tabs should now show video from each other!
+This is a proof-of-concept implementation for academic purposes. Not intended for production use without proper security audit.
 
-## 📅 Development Progress
+---
 
-- [x] Day 1: Foundational WebRTC Video Call
-- [x] Day 2: Hybrid Post-Quantum Key Exchange
-- [x] Day 3: MITM Detection via SAS
-- [x] Day 4: Double-Layer Encryption & Polish
-
-## 📚 References
-
-Based on academic research in post-quantum VoIP security. See `/papers` directory.
+*AEGIS-VoIP - Information Security Semester Project*
