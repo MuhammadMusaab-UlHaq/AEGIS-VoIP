@@ -1,15 +1,8 @@
-/**
- * AEGIS-VoIP - Crypto Module
- * Implements Hybrid Post-Quantum Key Exchange: X25519 (ECDH) + Kyber (PQC KEM)
- * Day 3: Added SAS generation
- */
+// Hybrid Post-Quantum Key Exchange: X25519 + Kyber-1024
+// SAS generation for MITM detection
 
 import _sodium from 'libsodium-wrappers';
 import { kyber } from 'kyber-crystals';
-
-// ============================================
-// Utility Functions
-// ============================================
 
 const CryptoUtils = {
     toBase64(bytes) {
@@ -39,17 +32,9 @@ const CryptoUtils = {
     }
 };
 
-// ============================================
-// Crypto Module State
-// ============================================
-
 let cryptoInitialized = false;
 let sodium = null;
 let Kyber = null;
-
-// ============================================
-// Initialization
-// ============================================
 
 async function initializeCrypto() {
     if (cryptoInitialized) {
@@ -63,25 +48,20 @@ async function initializeCrypto() {
         console.log('[Crypto] libsodium initialized');
 
         Kyber = kyber;
-        console.log('[Crypto] Kyber initialized (using Kyber-1024)');
+        console.log('[Crypto] Kyber initialized');
 
         cryptoInitialized = true;
-        console.log('[Crypto] All crypto libraries initialized successfully');
+        console.log('[Crypto] All libraries ready');
         return true;
-
     } catch (error) {
         console.error('[Crypto] Initialization failed:', error);
         throw error;
     }
 }
 
-// ============================================
-// X25519 (ECDH) Operations
-// ============================================
-
+// X25519 ECDH operations
 function generateECDHKeyPair() {
     if (!cryptoInitialized) throw new Error('Crypto not initialized');
-    
     const keyPair = sodium.crypto_box_keypair();
     return {
         publicKey: keyPair.publicKey,
@@ -94,13 +74,9 @@ function computeECDHSecret(myPrivateKey, theirPublicKey) {
     return sodium.crypto_scalarmult(myPrivateKey, theirPublicKey);
 }
 
-// ============================================
-// Kyber (PQC KEM) Operations
-// ============================================
-
+// Kyber KEM operations
 async function generateKyberKeyPair() {
     if (!cryptoInitialized) throw new Error('Crypto not initialized');
-    
     const keyPair = await Kyber.keyPair();
     return {
         publicKey: new Uint8Array(keyPair.publicKey),
@@ -110,7 +86,6 @@ async function generateKyberKeyPair() {
 
 async function kyberEncapsulate(theirPublicKey) {
     if (!cryptoInitialized) throw new Error('Crypto not initialized');
-    
     const result = await Kyber.encrypt(theirPublicKey);
     return {
         ciphertext: new Uint8Array(result.cyphertext),
@@ -120,15 +95,11 @@ async function kyberEncapsulate(theirPublicKey) {
 
 async function kyberDecapsulate(ciphertext, mySecretKey) {
     if (!cryptoInitialized) throw new Error('Crypto not initialized');
-    
     const sharedSecret = await Kyber.decrypt(ciphertext, mySecretKey);
     return new Uint8Array(sharedSecret);
 }
 
-// ============================================
-// Hybrid Key Exchange
-// ============================================
-
+// Hybrid key exchange
 async function generateHybridKeyPair() {
     if (!cryptoInitialized) throw new Error('Crypto not initialized');
     
@@ -136,8 +107,8 @@ async function generateHybridKeyPair() {
     const kyberKeys = await generateKyberKeyPair();
     
     console.log('[Crypto] Generated hybrid key pair');
-    console.log('[Crypto] ECDH Public Key length:', ecdhKeys.publicKey.length);
-    console.log('[Crypto] Kyber Public Key length:', kyberKeys.publicKey.length);
+    console.log('[Crypto] ECDH PK:', ecdhKeys.publicKey.length, 'bytes');
+    console.log('[Crypto] Kyber PK:', kyberKeys.publicKey.length, 'bytes');
     
     return {
         ecdh: ecdhKeys,
@@ -148,16 +119,15 @@ async function generateHybridKeyPair() {
 async function responderKeyAgreement(theirEcdhPk, theirKyberPk) {
     if (!cryptoInitialized) throw new Error('Crypto not initialized');
     
-    console.log('[Crypto] Responder performing key agreement...');
+    console.log('[Crypto] Responder key agreement...');
     
     const myEcdhKeys = generateECDHKeyPair();
     const ecdhSecret = computeECDHSecret(myEcdhKeys.privateKey, theirEcdhPk);
-    console.log('[Crypto] ECDH secret computed, length:', ecdhSecret.length);
+    console.log('[Crypto] ECDH secret:', ecdhSecret.length, 'bytes');
     
     const kyberResult = await kyberEncapsulate(theirKyberPk);
-    console.log('[Crypto] Kyber encapsulation done');
-    console.log('[Crypto] Kyber ciphertext length:', kyberResult.ciphertext.length);
-    console.log('[Crypto] Kyber shared secret length:', kyberResult.sharedSecret.length);
+    console.log('[Crypto] Kyber ciphertext:', kyberResult.ciphertext.length, 'bytes');
+    console.log('[Crypto] Kyber secret:', kyberResult.sharedSecret.length, 'bytes');
     
     return {
         myEcdhPublicKey: myEcdhKeys.publicKey,
@@ -170,13 +140,13 @@ async function responderKeyAgreement(theirEcdhPk, theirKyberPk) {
 async function initiatorKeyAgreement(myEcdhPrivateKey, myKyberSecretKey, theirEcdhPk, kyberCiphertext) {
     if (!cryptoInitialized) throw new Error('Crypto not initialized');
     
-    console.log('[Crypto] Initiator performing key agreement...');
+    console.log('[Crypto] Initiator key agreement...');
     
     const ecdhSecret = computeECDHSecret(myEcdhPrivateKey, theirEcdhPk);
-    console.log('[Crypto] ECDH secret computed, length:', ecdhSecret.length);
+    console.log('[Crypto] ECDH secret:', ecdhSecret.length, 'bytes');
     
     const kyberSecret = await kyberDecapsulate(kyberCiphertext, myKyberSecretKey);
-    console.log('[Crypto] Kyber decapsulation done, secret length:', kyberSecret.length);
+    console.log('[Crypto] Kyber secret:', kyberSecret.length, 'bytes');
     
     return {
         ecdhSecret: ecdhSecret,
@@ -184,10 +154,7 @@ async function initiatorKeyAgreement(myEcdhPrivateKey, myKyberSecretKey, theirEc
     };
 }
 
-// ============================================
-// Key Derivation Function (HKDF)
-// ============================================
-
+// HKDF for key derivation
 async function hkdfExtract(salt, ikm) {
     const keyMaterial = await crypto.subtle.importKey(
         'raw',
@@ -238,16 +205,13 @@ async function deriveMasterSecret(ecdhSecret, kyberSecret) {
     const prk = await hkdfExtract(new Uint8Array(0), ikm);
     const masterSecret = await hkdfExpand(prk, info, 32);
     
-    console.log('[Crypto] Master secret derived, length:', masterSecret.length);
+    console.log('[Crypto] Master secret:', masterSecret.length, 'bytes');
     console.log('[Crypto] Master secret (hex):', CryptoUtils.toHex(masterSecret));
     
     return masterSecret;
 }
 
-// ============================================
-// DAY 3: Short Authentication String (SAS)
-// ============================================
-
+// SAS generation
 const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 
 const PGP_WORDS_EVEN = [
@@ -335,7 +299,7 @@ async function generateSAS(masterSecret, initiatorEcdhPk, responderEcdhPk, initi
         ...responderKyberPk
     ]);
     
-    console.log('[Crypto] SAS input data length:', dataToHash.length);
+    console.log('[Crypto] SAS input:', dataToHash.length, 'bytes');
     
     const hashBuffer = await crypto.subtle.digest('SHA-256', dataToHash);
     const hashArray = new Uint8Array(hashBuffer);
@@ -350,7 +314,7 @@ async function generateSAS(masterSecret, initiatorEcdhPk, responderEcdhPk, initi
     const words = `${word1} ${word2}`;
     const numeric = ((hashArray[0] << 8) | hashArray[1]).toString().padStart(5, '0').substring(0, 4);
     
-    console.log('[Crypto] SAS generated:', { base32, words, numeric });
+    console.log('[Crypto] SAS:', { base32, words, numeric });
     
     return { base32, words, numeric };
 }
@@ -363,10 +327,6 @@ function encodeBase32_20bit(bits20) {
     }
     return result;
 }
-
-// ============================================
-// Public API
-// ============================================
 
 const Crypto = {
     initialize: initializeCrypto,

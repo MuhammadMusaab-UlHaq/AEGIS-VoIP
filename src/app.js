@@ -1,17 +1,8 @@
-/**
- * AEGIS-VoIP - Post-Quantum Secure Communication
- * Day 3: SAS Verification Implementation
- */
-
 import { Crypto, CryptoUtils } from './crypto.js';
 
-// ============================================
-// Double Encryption Support (CORRECTED)
-// ============================================
-
+// Double encryption support
 let encryptionWorker = null;
 
-// More precise feature detection
 const hasModernInsertableStreams = typeof RTCRtpScriptTransform !== 'undefined';
 const hasLegacyInsertableStreams = typeof RTCRtpSender !== 'undefined' && 
                                     typeof RTCRtpSender.prototype.createEncodedStreams !== 'undefined';
@@ -33,25 +24,22 @@ function initializeEncryptionWorker() {
     }
 }
 
-// Activate encryption by sending the key to the worker
 async function activateDoubleEncryption() {
     if (!encryptionWorker || !state.crypto.masterSecret) {
         Logger.warning('Cannot activate double encryption - missing worker or key');
         return false;
     }
     
-    // Send master secret to worker to ENABLE encryption
     encryptionWorker.postMessage({
         operation: 'setKey',
         masterSecret: state.crypto.masterSecret,
         enabled: true
     });
     
-    Logger.success('🔐 Double encryption ACTIVATED with PQC-derived key');
+    Logger.success('Double encryption ACTIVATED');
     return true;
 }
 
-// Deactivate encryption (for cleanup)
 function deactivateDoubleEncryption() {
     if (encryptionWorker) {
         encryptionWorker.postMessage({
@@ -63,32 +51,24 @@ function deactivateDoubleEncryption() {
     }
 }
 
-// ============================================
 // Configuration
-// ============================================
-
 const CONFIG = {
     iceServers: [
-        // Mix of reliable STUN servers from different providers
-        // This increases the chance of getting candidates quickly
-        { urls: 'stun:stun.l.google.com:19302' },        // Keep one Google as fallback
-        { urls: 'stun:stun.cloudflare.com:3478' },       // Cloudflare - very reliable
-        { urls: 'stun:stun.relay.metered.ca:80' },       // Metered - good uptime
-        { urls: 'stun:stun.miwifi.com:3478' },           // Xiaomi - fast
-        { urls: 'stun:stun.qq.com:3478' },               // Tencent - reliable
-        { urls: 'stun:stun.twilio.com:3478' },           // Twilio - enterprise grade
-        { urls: 'stun:stun.xirsys.com' },                // Xirsys - WebRTC focused
-        { urls: 'stun:stun.nextcloud.com:3478' },        // Nextcloud - open source
-        { urls: 'stun:relay.webwormhole.io:3478' },      // Webwormhole - P2P focused
-        { urls: 'stun:freeturn.net:3478' },              // FreeTurn - dedicated STUN/TURN
-        { urls: 'stun:stun.sipgate.net:3478' },          // Sipgate - VoIP provider
-        { urls: 'stun:stun.ekiga.net' }                  // Ekiga - open source VoIP
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun.cloudflare.com:3478' },
+        { urls: 'stun:stun.relay.metered.ca:80' },
+        { urls: 'stun:stun.miwifi.com:3478' },
+        { urls: 'stun:stun.qq.com:3478' },
+        { urls: 'stun:stun.twilio.com:3478' },
+        { urls: 'stun:stun.xirsys.com' },
+        { urls: 'stun:stun.nextcloud.com:3478' },
+        { urls: 'stun:relay.webwormhole.io:3478' },
+        { urls: 'stun:freeturn.net:3478' },
+        { urls: 'stun:stun.sipgate.net:3478' },
+        { urls: 'stun:stun.ekiga.net' }
     ],
-    // ICE transport policy - 'all' allows both UDP and TCP candidates
     iceTransportPolicy: 'all',
-    // Bundle policy to multiplex media
     bundlePolicy: 'max-bundle',
-    // RTCP multiplexing policy
     rtcpMuxPolicy: 'require',
     mediaConstraints: {
         video: {
@@ -102,13 +82,10 @@ const CONFIG = {
             autoGainControl: true
         }
     },
-    iceGatheringTimeout: 5000  // Back to 5 seconds with better servers
+    iceGatheringTimeout: 5000
 };
 
-// ============================================
-// State Management
-// ============================================
-
+// State
 const state = {
     peerConnection: null,
     localStream: null,
@@ -131,10 +108,7 @@ const state = {
     }
 };
 
-// ============================================
 // DOM Elements
-// ============================================
-
 const elements = {
     localVideo: document.getElementById('localVideo'),
     remoteVideo: document.getElementById('remoteVideo'),
@@ -175,10 +149,7 @@ const elements = {
     clearLogBtn: document.getElementById('clearLogBtn')
 };
 
-// ============================================
 // Logging
-// ============================================
-
 const Logger = {
     log(message, type = 'info') {
         const timestamp = new Date().toLocaleTimeString();
@@ -196,13 +167,10 @@ const Logger = {
     success(msg) { this.log(msg, 'success'); },
     warning(msg) { this.log(msg, 'warning'); },
     error(msg) { this.log(msg, 'error'); },
-    crypto(msg) { this.log(`🔐 ${msg}`, 'crypto'); }
+    crypto(msg) { this.log(`🔐 ${msg}`, 'info'); }
 };
 
-// ============================================
-// UI Management
-// ============================================
-
+// UI helpers
 function updateSecurityIndicator(status) {
     const indicator = elements.securityIndicator;
     const textSpan = indicator.querySelector('.indicator-text');
@@ -258,19 +226,16 @@ function closeAllModals() {
     });
 }
 
-// ============================================
-// Media Stream Management
-// ============================================
-
+// Media
 async function initializeLocalMedia() {
     try {
         Logger.info('Requesting camera and microphone access...');
         state.localStream = await navigator.mediaDevices.getUserMedia(CONFIG.mediaConstraints);
         elements.localVideo.srcObject = state.localStream;
-        Logger.success('Local media stream initialized');
+        Logger.success('Local media initialized');
         return true;
     } catch (error) {
-        Logger.error(`Failed to access media devices: ${error.message}`);
+        Logger.error(`Failed to access media: ${error.message}`);
         alert('Could not access camera/microphone.');
         return false;
     }
@@ -278,19 +243,13 @@ async function initializeLocalMedia() {
 
 function stopLocalMedia() {
     if (state.localStream) {
-        state.localStream.getTracks().forEach(track => {
-            track.stop();
-            Logger.info(`Stopped ${track.kind} track`);
-        });
+        state.localStream.getTracks().forEach(track => track.stop());
         state.localStream = null;
         elements.localVideo.srcObject = null;
     }
 }
 
-// ============================================
-// WebRTC Peer Connection
-// ============================================
-
+// WebRTC
 function createPeerConnection() {
     Logger.info('Creating RTCPeerConnection...');
     
@@ -299,14 +258,12 @@ function createPeerConnection() {
         iceTransportPolicy: CONFIG.iceTransportPolicy,
         bundlePolicy: CONFIG.bundlePolicy,
         rtcpMuxPolicy: CONFIG.rtcpMuxPolicy,
-        iceCandidatePoolSize: 10  // Pre-allocate candidates for faster gathering
+        iceCandidatePoolSize: 10
     };
     
-    // For legacy API (older Chrome without RTCRtpScriptTransform), 
-    // we MUST enable this at creation time
     if (hasLegacyInsertableStreams && !hasModernInsertableStreams) {
         config.encodedInsertableStreams = true;
-        Logger.info('Enabling legacy encodedInsertableStreams mode');
+        Logger.info('Using legacy encodedInsertableStreams');
     }
     
     const pc = new RTCPeerConnection(config);
@@ -314,21 +271,17 @@ function createPeerConnection() {
     if (state.localStream) {
         state.localStream.getTracks().forEach(track => {
             pc.addTrack(track, state.localStream);
-            Logger.info(`Added ${track.kind} track to peer connection`);
         });
     }
     
-    // Setup sender transforms IMMEDIATELY after adding tracks
-    // FIX: Only attach to VIDEO tracks to prevent audio issues in Firefox
+    // Setup sender transforms for video only
     if (encryptionWorker && supportsInsertableStreams) {
         pc.getSenders().forEach(sender => {
-            if (sender.track && sender.track.kind === 'video') { // <--- Added check here
+            if (sender.track && sender.track.kind === 'video') {
                 try {
                     if (hasModernInsertableStreams) {
-                        sender.transform = new RTCRtpScriptTransform(encryptionWorker, {
-                            operation: 'encode'
-                        });
-                        Logger.crypto(`Sender transform ready for ${sender.track.kind}`);
+                        sender.transform = new RTCRtpScriptTransform(encryptionWorker, { operation: 'encode' });
+                        Logger.crypto('Sender transform ready (video)');
                     } else if (hasLegacyInsertableStreams) {
                         const streams = sender.createEncodedStreams();
                         encryptionWorker.postMessage({
@@ -336,33 +289,30 @@ function createPeerConnection() {
                             readable: streams.readable,
                             writable: streams.writable
                         }, [streams.readable, streams.writable]);
-                        Logger.crypto(`Sender transform ready for ${sender.track.kind} (legacy)`);
+                        Logger.crypto('Sender transform ready (video, legacy)');
                     }
                 } catch (error) {
-                    Logger.error(`Sender transform setup failed: ${error.message}`);
+                    Logger.error(`Sender transform failed: ${error.message}`);
                 }
-            } else if (sender.track) {
-                Logger.info(`Skipping double encryption for ${sender.track.kind} track (stability)`);
             }
         });
     }
     
     pc.onicecandidate = (event) => {
         if (event.candidate) {
-            Logger.info(`ICE candidate: ${event.candidate.candidate.substring(0, 60)}...`);
             state.iceCandidates.push(event.candidate);
         } else {
-            Logger.success(`ICE gathering complete (${state.iceCandidates.length} total)`);
+            Logger.success(`ICE complete (${state.iceCandidates.length} candidates)`);
             state.iceGatheringComplete = true;
         }
     };
     
     pc.onicegatheringstatechange = () => {
-        Logger.info(`ICE gathering state: ${pc.iceGatheringState}`);
+        Logger.info(`ICE gathering: ${pc.iceGatheringState}`);
     };
     
     pc.oniceconnectionstatechange = () => {
-        Logger.info(`ICE connection state: ${pc.iceConnectionState}`);
+        Logger.info(`ICE connection: ${pc.iceConnectionState}`);
         
         switch (pc.iceConnectionState) {
             case 'connected':
@@ -387,9 +337,8 @@ function createPeerConnection() {
     };
     
     pc.onconnectionstatechange = () => {
-        Logger.info(`Connection state: ${pc.connectionState}`);
+        Logger.info(`Connection: ${pc.connectionState}`);
         if (pc.connectionState === 'failed') {
-            Logger.error('Peer connection failed');
             hangUp();
         }
     };
@@ -405,24 +354,20 @@ function createPeerConnection() {
         state.remoteStream.addTrack(event.track);
         elements.remotePlaceholder.classList.add('hidden');
         
-        // Setup receiver transform
-        // FIX: Only attach to VIDEO tracks to prevent audio issues in Firefox
-        if (encryptionWorker && supportsInsertableStreams && event.track.kind === 'video') { // <--- Added check here
+        // Setup receiver transform for video only
+        if (encryptionWorker && supportsInsertableStreams && event.track.kind === 'video') {
             try {
                 if (hasModernInsertableStreams) {
-                    event.receiver.transform = new RTCRtpScriptTransform(encryptionWorker, {
-                        operation: 'decode'
-                    });
-                    Logger.crypto(`Receiver transform ready for ${event.track.kind}`);
+                    event.receiver.transform = new RTCRtpScriptTransform(encryptionWorker, { operation: 'decode' });
+                    Logger.crypto('Receiver transform ready (video)');
                 } else if (hasLegacyInsertableStreams) {
-                    // Legacy API - this should work now because we set encodedInsertableStreams: true
                     const streams = event.receiver.createEncodedStreams();
                     encryptionWorker.postMessage({
                         operation: 'decode',
                         readable: streams.readable,
                         writable: streams.writable
                     }, [streams.readable, streams.writable]);
-                    Logger.crypto(`Receiver transform ready for ${event.track.kind} (legacy)`);
+                    Logger.crypto('Receiver transform ready (video, legacy)');
                 }
             } catch (error) {
                 Logger.error(`Receiver transform failed: ${error.message}`);
@@ -438,10 +383,7 @@ function createPeerConnection() {
     return pc;
 }
 
-// ============================================
 // Signaling
-// ============================================
-
 function createSignalingToken(sdp, iceCandidates, cryptoData = null) {
     const token = {
         sdp: sdp,
@@ -460,7 +402,7 @@ function parseSignalingToken(tokenString) {
         if (!token.sdp || !token.ice) throw new Error('Invalid token structure');
         return token;
     } catch (error) {
-        Logger.error(`Failed to parse signaling token: ${error.message}`);
+        Logger.error(`Failed to parse token: ${error.message}`);
         throw new Error('Invalid signaling token.');
     }
 }
@@ -468,9 +410,9 @@ function parseSignalingToken(tokenString) {
 function waitForIceGathering() {
     return new Promise((resolve) => {
         const pc = state.peerConnection;
-        const MIN_CANDIDATES = 2;    // Need at least 2 candidates
-        const MIN_WAIT = 1500;       // Minimum 1.5 seconds
-        const MAX_WAIT = 5000;       // Maximum 5 seconds
+        const MIN_CANDIDATES = 2;
+        const MIN_WAIT = 1500;
+        const MAX_WAIT = 5000;
         
         const startTime = Date.now();
         
@@ -479,13 +421,13 @@ function waitForIceGathering() {
             const candidateCount = state.iceCandidates.length;
             
             if (candidateCount >= MIN_CANDIDATES && elapsed >= MIN_WAIT) {
-                Logger.success(`ICE gathering complete: ${candidateCount} candidates`);
+                Logger.success(`ICE complete: ${candidateCount} candidates`);
                 resolve();
             } else if (elapsed >= MAX_WAIT) {
                 if (candidateCount === 0) {
-                    Logger.error(`No ICE candidates after ${MAX_WAIT}ms - check network/firewall`);
+                    Logger.error('No ICE candidates - check network/firewall');
                 } else {
-                    Logger.warning(`Only ${candidateCount} candidates after ${MAX_WAIT}ms`);
+                    Logger.warning(`Only ${candidateCount} candidates after timeout`);
                 }
                 resolve();
             } else {
@@ -493,22 +435,13 @@ function waitForIceGathering() {
             }
         };
         
-        // Start checking after a brief delay
         setTimeout(checkAndResolve, MIN_WAIT);
-        
-        // Log gathering state changes for debugging
-        pc.addEventListener('icegatheringstatechange', () => {
-            Logger.info(`ICE gathering state: ${pc.iceGatheringState} (${state.iceCandidates.length} candidates)`);
-        });
     });
 }
 
-// ============================================
 // Create Call (Initiator)
-// ============================================
-
 async function createCall() {
-    Logger.info('=== Starting Create Call Flow ===');
+    Logger.info('Starting Create Call...');
     state.isInitiator = true;
     state.iceCandidates = [];
     state.iceGatheringComplete = false;
@@ -528,27 +461,23 @@ async function createCall() {
     setButtonStates('calling');
     
     try {
-        Logger.crypto('Generating hybrid key pair (X25519 + Kyber)...');
+        Logger.crypto('Generating hybrid key pair...');
         state.crypto.myKeys = await Crypto.generateHybridKeyPair();
-        Logger.crypto('Hybrid key pair generated successfully');
         
-        Logger.info('Creating SDP offer...');
         const offer = await state.peerConnection.createOffer({
             offerToReceiveAudio: true,
             offerToReceiveVideo: true
         });
         
         await state.peerConnection.setLocalDescription(offer);
-        Logger.success('Local description set (offer)');
+        Logger.success('Local description set');
         
-        Logger.info('Gathering ICE candidates...');
         await waitForIceGathering();
         
         const cryptoData = {
             ecdhPublicKey: CryptoUtils.toBase64(state.crypto.myKeys.ecdh.publicKey),
             kyberPublicKey: CryptoUtils.toBase64(state.crypto.myKeys.kyber.publicKey)
         };
-        Logger.crypto('Public keys encoded for transmission');
         
         const token = createSignalingToken(
             state.peerConnection.localDescription,
@@ -560,19 +489,15 @@ async function createCall() {
         elements.answerInput.value = '';
         openModal(elements.offerModal);
         
-        Logger.success('Offer token generated with PQC key material - ready to share');
+        Logger.success('Offer ready');
         
     } catch (error) {
-        Logger.error(`Failed to create offer: ${error.message}`);
-        console.error(error);
+        Logger.error(`Create offer failed: ${error.message}`);
         hangUp();
     }
 }
 
-// ============================================
 // Process Answer (Initiator)
-// ============================================
-
 async function processAnswer() {
     const answerToken = elements.answerInput.value.trim();
     if (!answerToken) {
@@ -581,24 +506,23 @@ async function processAnswer() {
     }
     
     try {
-        Logger.info('Processing Answer token...');
+        Logger.info('Processing Answer...');
         const parsed = parseSignalingToken(answerToken);
         
         const answerDesc = new RTCSessionDescription(parsed.sdp);
         await state.peerConnection.setRemoteDescription(answerDesc);
-        Logger.success('Remote description set (answer)');
+        Logger.success('Remote description set');
         
-        Logger.info(`Adding ${parsed.ice.length} remote ICE candidates...`);
         for (const candidate of parsed.ice) {
             try {
                 await state.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
             } catch (e) {
-                Logger.warning(`Failed to add ICE candidate: ${e.message}`);
+                Logger.warning(`ICE candidate failed: ${e.message}`);
             }
         }
         
         if (parsed.crypto && state.crypto.myKeys) {
-            Logger.crypto('Performing initiator key agreement...');
+            Logger.crypto('Initiator key agreement...');
             
             const theirEcdhPk = CryptoUtils.fromBase64(parsed.crypto.ecdhPublicKey);
             const kyberCiphertext = CryptoUtils.fromBase64(parsed.crypto.kyberCiphertext);
@@ -619,7 +543,7 @@ async function processAnswer() {
             );
             
             state.crypto.isKeyExchangeComplete = true;
-            Logger.crypto('✅ Master secret derived successfully!');
+            Logger.crypto('Master secret derived');
             
             state.crypto.sas = await Crypto.generateSAS(
                 state.crypto.masterSecret,
@@ -629,30 +553,23 @@ async function processAnswer() {
                 kyberCiphertext
             );
             
-            Logger.crypto(`SAS generated: ${state.crypto.sas.base32} / ${state.crypto.sas.words}`);
+            Logger.crypto(`SAS: ${state.crypto.sas.base32} / ${state.crypto.sas.words}`);
             updateSecurityIndicator('unverified');
             showSASVerification();
-            
-        } else {
-            Logger.warning('No crypto data in answer or missing local keys');
         }
         
         closeModal(elements.offerModal);
-        Logger.success('Connection process complete - waiting for media');
+        Logger.success('Connection process complete');
         
     } catch (error) {
-        Logger.error(`Failed to process answer: ${error.message}`);
-        console.error(error);
+        Logger.error(`Process answer failed: ${error.message}`);
         alert(error.message);
     }
 }
 
-// ============================================
 // Join Call (Responder)
-// ============================================
-
 async function joinCall() {
-    Logger.info('=== Starting Join Call Flow ===');
+    Logger.info('Starting Join Call...');
     state.isInitiator = false;
     state.iceCandidates = [];
     state.iceGatheringComplete = false;
@@ -671,10 +588,7 @@ async function joinCall() {
     openModal(elements.joinModal);
 }
 
-// ============================================
 // Process Offer (Responder)
-// ============================================
-
 async function processOffer() {
     const offerToken = elements.offerInput.value.trim();
     if (!offerToken) {
@@ -683,7 +597,7 @@ async function processOffer() {
     }
     
     try {
-        Logger.info('Processing Offer token...');
+        Logger.info('Processing Offer...');
         const parsed = parseSignalingToken(offerToken);
         
         createPeerConnection();
@@ -692,21 +606,20 @@ async function processOffer() {
         
         const offerDesc = new RTCSessionDescription(parsed.sdp);
         await state.peerConnection.setRemoteDescription(offerDesc);
-        Logger.success('Remote description set (offer)');
+        Logger.success('Remote description set');
         
-        Logger.info(`Adding ${parsed.ice.length} remote ICE candidates...`);
         for (const candidate of parsed.ice) {
             try {
                 await state.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
             } catch (e) {
-                Logger.warning(`Failed to add ICE candidate: ${e.message}`);
+                Logger.warning(`ICE candidate failed: ${e.message}`);
             }
         }
         
         let cryptoResponseData = null;
         
         if (parsed.crypto) {
-            Logger.crypto('Performing responder key agreement...');
+            Logger.crypto('Responder key agreement...');
             
             const theirEcdhPk = CryptoUtils.fromBase64(parsed.crypto.ecdhPublicKey);
             const theirKyberPk = CryptoUtils.fromBase64(parsed.crypto.kyberPublicKey);
@@ -724,7 +637,7 @@ async function processOffer() {
             );
             
             state.crypto.isKeyExchangeComplete = true;
-            Logger.crypto('✅ Master secret derived successfully!');
+            Logger.crypto('Master secret derived');
             
             state.crypto.sas = await Crypto.generateSAS(
                 state.crypto.masterSecret,
@@ -734,7 +647,7 @@ async function processOffer() {
                 keyAgreementResult.kyberCiphertext
             );
             
-            Logger.crypto(`SAS generated: ${state.crypto.sas.base32} / ${state.crypto.sas.words}`);
+            Logger.crypto(`SAS: ${state.crypto.sas.base32} / ${state.crypto.sas.words}`);
             updateSecurityIndicator('unverified');
             showSASVerification();
             
@@ -742,18 +655,12 @@ async function processOffer() {
                 ecdhPublicKey: CryptoUtils.toBase64(keyAgreementResult.myEcdhPublicKey),
                 kyberCiphertext: CryptoUtils.toBase64(keyAgreementResult.kyberCiphertext)
             };
-            Logger.crypto('Crypto response data prepared for answer');
-            
-        } else {
-            Logger.warning('No crypto data in offer - proceeding without PQC');
         }
         
-        Logger.info('Creating SDP answer...');
         const answer = await state.peerConnection.createAnswer();
         await state.peerConnection.setLocalDescription(answer);
-        Logger.success('Local description set (answer)');
+        Logger.success('Local description set');
         
-        Logger.info('Gathering ICE candidates...');
         await waitForIceGathering();
         
         const token = createSignalingToken(
@@ -766,32 +673,25 @@ async function processOffer() {
         elements.answerDisplay.value = token;
         openModal(elements.answerModal);
         
-        Logger.success('Answer token generated with PQC key material - ready to share');
+        Logger.success('Answer ready');
         
     } catch (error) {
-        Logger.error(`Failed to process offer: ${error.message}`);
-        console.error(error);
+        Logger.error(`Process offer failed: ${error.message}`);
         alert(error.message);
         hangUp();
     }
 }
 
-// ============================================
 // Hang Up
-// ============================================
-
 function hangUp() {
-    Logger.info('=== Hanging up call ===');
+    Logger.info('Hanging up...');
     
     closeAllModals();
-    
-    // Deactivate encryption
     deactivateDoubleEncryption();
     
     if (state.peerConnection) {
         state.peerConnection.close();
         state.peerConnection = null;
-        Logger.info('Peer connection closed');
     }
     
     if (state.remoteStream) {
@@ -824,10 +724,7 @@ function hangUp() {
     Logger.success('Call ended');
 }
 
-// ============================================
 // Media Controls
-// ============================================
-
 function toggleVideo() {
     if (!state.localStream) return;
     const videoTrack = state.localStream.getVideoTracks()[0];
@@ -835,7 +732,6 @@ function toggleVideo() {
         videoTrack.enabled = !videoTrack.enabled;
         elements.toggleVideoBtn.textContent = videoTrack.enabled ? '📹 Video On' : '📹 Video Off';
         elements.toggleVideoBtn.classList.toggle('muted', !videoTrack.enabled);
-        Logger.info(`Video ${videoTrack.enabled ? 'enabled' : 'disabled'}`);
     }
 }
 
@@ -846,14 +742,10 @@ function toggleAudio() {
         audioTrack.enabled = !audioTrack.enabled;
         elements.toggleAudioBtn.textContent = audioTrack.enabled ? '🎤 Mic On' : '🎤 Mic Off';
         elements.toggleAudioBtn.classList.toggle('muted', !audioTrack.enabled);
-        Logger.info(`Audio ${audioTrack.enabled ? 'enabled' : 'disabled'}`);
     }
 }
 
-// ============================================
 // Clipboard
-// ============================================
-
 async function copyToClipboard(text, button) {
     try {
         await navigator.clipboard.writeText(text);
@@ -864,41 +756,31 @@ async function copyToClipboard(text, button) {
             button.textContent = originalText;
             button.classList.remove('copy-success');
         }, 2000);
-        Logger.success('Token copied to clipboard');
     } catch (error) {
-        Logger.error('Failed to copy to clipboard');
         const textarea = button.previousElementSibling;
         if (textarea) {
             textarea.select();
-            alert('Please copy the selected text manually (Ctrl+C)');
+            alert('Please copy manually (Ctrl+C)');
         }
     }
 }
 
-// ============================================
 // SAS Verification
-// ============================================
-
 function showSASVerification() {
     if (!state.crypto.sas) {
-        Logger.error('No SAS available to display');
+        Logger.error('No SAS available');
         return;
     }
     
-    const sasDisplay = elements.sasCode;
-    sasDisplay.innerHTML = `
+    elements.sasCode.innerHTML = `
         <div class="sas-base32">${state.crypto.sas.base32}</div>
         <div class="sas-words">${state.crypto.sas.words}</div>
     `;
     
-    Logger.info('Showing SAS verification modal');
     openModal(elements.sasModal);
 }
 
-// ============================================
 // Event Listeners
-// ============================================
-
 function initializeEventListeners() {
     elements.createCallBtn.addEventListener('click', createCall);
     elements.joinCallBtn.addEventListener('click', joinCall);
@@ -926,23 +808,20 @@ function initializeEventListeners() {
     });
     
     elements.sasAccept.addEventListener('click', async () => {
-        Logger.success('SAS accepted by user');
+        Logger.success('SAS accepted');
         closeModal(elements.sasModal);
         updateSecurityIndicator('verified');
 
         const activated = await activateDoubleEncryption();
-
         if (activated) {
             updateSecurityIndicator('verified-e2ee');
-        } else {
-            Logger.warning('Could not activate double encryption. Call is secure but not double-encrypted.');
         }
     });
     
     elements.sasReject.addEventListener('click', () => {
-        Logger.error('SAS verification REJECTED - possible MITM attack!');
+        Logger.error('SAS REJECTED - possible MITM!');
         closeModal(elements.sasModal);
-        alert('⚠️ SECURITY WARNING ⚠️\n\nThe security codes did not match!\nThis call may be intercepted by an attacker.\n\nThe call will now be terminated for your safety.');
+        alert('⚠️ SECURITY WARNING ⚠️\n\nThe codes did not match!\nPossible MITM attack.\n\nTerminating call.');
         hangUp();
     });
     
@@ -969,65 +848,54 @@ function initializeEventListeners() {
     });
 }
 
-// ============================================
-// Initialization
-// ============================================
-
+// Initialize
 async function initialize() {
-    Logger.info('=== AEGIS-VoIP Initializing ===');
-    Logger.info(`Browser: ${navigator.userAgent}`);
+    Logger.info('AEGIS-VoIP Initializing...');
     
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        Logger.error('WebRTC is not supported in this browser');
+        Logger.error('WebRTC not supported');
         alert('Your browser does not support WebRTC.');
         return;
     }
     
     if (!window.RTCPeerConnection) {
-        Logger.error('RTCPeerConnection is not available');
-        alert('RTCPeerConnection is not supported.');
+        Logger.error('RTCPeerConnection not available');
+        alert('RTCPeerConnection not supported.');
         return;
     }
     
-    Logger.success('WebRTC support confirmed');
+    Logger.success('WebRTC supported');
     
-    // Detect Chrome on desktop (not Edge) and warn about potential issues
     if (navigator.userAgent.includes('Chrome') && !navigator.userAgent.includes('Edg')) {
-        // It's Chrome (not Edge which includes 'Chrome' in UA)
         const isPC = !/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
         if (isPC) {
-            Logger.warning('⚠️ Chrome on PC may have connectivity issues. Consider using Microsoft Edge for best results.');
+            Logger.warning('Chrome on PC may have issues - consider using Edge');
         }
     }
     
     try {
-        Logger.info('Initializing cryptographic libraries...');
         await Crypto.initialize();
-        Logger.success('Crypto libraries initialized (libsodium + Kyber)');
+        Logger.success('Crypto libraries ready');
     } catch (error) {
-        Logger.error(`Failed to initialize crypto: ${error.message}`);
-        console.error(error);
-        alert('Failed to initialize cryptographic libraries.');
+        Logger.error(`Crypto init failed: ${error.message}`);
+        alert('Failed to initialize crypto.');
         return;
     }
     
-    // Initialize encryption worker
     initializeEncryptionWorker();
     if (hasModernInsertableStreams) {
-        Logger.success('✅ Double encryption support detected (RTCRtpScriptTransform)');
+        Logger.success('Double encryption: RTCRtpScriptTransform');
     } else if (hasLegacyInsertableStreams) {
-        Logger.success('✅ Double encryption support detected (legacy createEncodedStreams)');
+        Logger.success('Double encryption: legacy API');
     } else {
-        Logger.warning('⚠️ Double encryption NOT available on this browser');
+        Logger.warning('Double encryption not available');
     }
     
     initializeEventListeners();
-    Logger.success('Event listeners initialized');
-    
     setButtonStates('initial');
     updateSecurityIndicator('disconnected');
     
-    Logger.success('=== AEGIS-VoIP Ready (Day 4: Double Encryption + SAS) ===');
+    Logger.success('AEGIS-VoIP Ready');
 }
 
 document.addEventListener('DOMContentLoaded', initialize);
