@@ -1,16 +1,23 @@
 /**
- * AEGIS-VoIP - Encryption Worker (SIMPLIFIED - NO HEADER PRESERVATION)
+ * AEGIS-VoIP - Encryption Worker (v2 - Codec Header Preservation)
+ * Implements frame-level encryption while preserving VP8 headers to prevent video corruption.
  */
-
 'use strict';
 
 let encryptionKey = null;
 let isEncryptionEnabled = false;
-let frameCounter = 0;
 
-// Constants
+// Sender and receiver frame counts must be tracked separately
+let sendFrameCount = 0;
+let receiveFrameCount = 0;
+
+// Constants for frame structure
 const IV_LENGTH = 12;
-const MAGIC_BYTES = new Uint8Array([0xAE, 0x61, 0x53]);
+const AUTH_TAG_LENGTH = 16; // AES-GCM uses a 128-bit (16-byte) auth tag
+
+// ============================================
+// Key Management
+// ============================================
 
 async function deriveEncryptionKey(masterSecret) {
     const keyMaterial = await crypto.subtle.importKey(
@@ -25,23 +32,61 @@ async function deriveEncryptionKey(masterSecret) {
         {
             name: 'HKDF',
             hash: 'SHA-256',
-            salt: new TextEncoder().encode('AEGIS-VoIP-E2EE-v1'),
-            info: new TextEncoder().encode('frame-encryption-key')
+            salt: new TextEncoder().encode('AEGIS-VoIP-E2EE-v1-FrameKey'),
+            info: new TextEncoder().encode('aes-gcm-256-key')
         },
         keyMaterial,
         { name: 'AES-GCM', length: 256 },
-        false,
+        true, // Key is extractable for debugging if needed, but set to false for production
         ['encrypt', 'decrypt']
     );
 }
 
-function generateIV(counter) {
+// Generate a unique IV for each frame based on a counter
+function generateIV(frameCount) {
     const iv = new Uint8Array(IV_LENGTH);
     const view = new DataView(iv.buffer);
-    view.setUint32(0, 0xAE615000);
-    view.setBigUint64(4, BigInt(counter));
+    // Use a 64-bit counter which is safe from ever repeating
+    view.setBigUint64(4, BigInt(frameCount));
     return iv;
 }
+
+// ============================================
+// VP8 Codec Header Parsing
+// (Needed to avoid encrypting critical frame metadata)
+// ============================================
+
+function getVp8HeaderLength(data) {
+    const view = new DataView(data.buffer);
+    // VP8 Payload Descriptor
+    const payloadDescriptor = view.getUint8(0);
+    
+    // Check for extended control bits
+    const extendedControlBitsPresent = (payloadDescriptor & 0x80) !== 0;
+    if (!extendedControlBitsPresent) {
+        return 1; // Basic header is just 1 byte
+    }
+
+    // Extended control bits are present
+    let headerLength = 2;
+    const extendedControlByte = view.getUint8(1);
+
+    // Check for PictureID, TL0PICIDX, TID/KEYIDX
+    if ((extendedControlByte & 0x80) !== 0) { // I bit
+        headerLength += (view.getUint8(headerLength) & 0x80) ? 2 : 1;
+    }
+    if ((extendedControlByte & 0x40) !== 0) { // L bit
+        headerLength++;
+    }
+    if ((extendedControlByte & 0x20) !== 0 || (extendedControlByte & 0x10) !== 0) { // T or K bit
+        headerLength++;
+    }
+    return headerLength;
+}
+
+// ============================================
+// Frame Encryption / Decryption Logic
+// ============================================
 
 async function encryptFrame(encodedFrame, controller) {
     if (!encryptionKey || !isEncryptionEnabled) {
@@ -49,36 +94,34 @@ async function encryptFrame(encodedFrame, controller) {
         return;
     }
 
+    const frameData = new Uint8Array(encodedFrame.data);
+    
     try {
-        const data = new Uint8Array(encodedFrame.data);
+        const headerLength = getVp8HeaderLength(frameData);
+        const header = frameData.slice(0, headerLength);
+        const payload = frameData.slice(headerLength);
+
+        const iv = generateIV(sendFrameCount++);
         
-        // Skip tiny frames
-        if (data.length < 10) {
-            controller.enqueue(encodedFrame);
-            return;
-        }
-        
-        const iv = generateIV(frameCounter++);
-        
-        // Encrypt ENTIRE frame data - no header preservation
-        const encrypted = await crypto.subtle.encrypt(
-            { name: 'AES-GCM', iv: iv },
+        const encryptedPayload = await crypto.subtle.encrypt(
+            { name: 'AES-GCM', iv: iv, tagLength: 128 },
             encryptionKey,
-            data
+            payload
         );
         
-        // Create new frame: [magic][iv][encrypted]
-        const newData = new Uint8Array(MAGIC_BYTES.length + IV_LENGTH + encrypted.byteLength);
-        newData.set(MAGIC_BYTES, 0);
-        newData.set(iv, MAGIC_BYTES.length);
-        newData.set(new Uint8Array(encrypted), MAGIC_BYTES.length + IV_LENGTH);
-        
-        encodedFrame.data = newData.buffer;
+        // New frame structure: [Unencrypted Header][IV][Encrypted Payload + Auth Tag]
+        const newFrameData = new Uint8Array(headerLength + IV_LENGTH + encryptedPayload.byteLength);
+        newFrameData.set(header, 0);
+        newFrameData.set(iv, headerLength);
+        newFrameData.set(new Uint8Array(encryptedPayload), headerLength + IV_LENGTH);
+
+        encodedFrame.data = newFrameData.buffer;
+        controller.enqueue(encodedFrame);
+
     } catch (error) {
-        console.error('[Worker] Encrypt error:', error);
+        console.error('[Worker] Encryption failed:', error);
+        // Don't enqueue corrupted frames
     }
-    
-    controller.enqueue(encodedFrame);
 }
 
 async function decryptFrame(encodedFrame, controller) {
@@ -87,50 +130,52 @@ async function decryptFrame(encodedFrame, controller) {
         return;
     }
 
+    const frameData = new Uint8Array(encodedFrame.data);
+    
     try {
-        const data = new Uint8Array(encodedFrame.data);
+        const headerLength = getVp8HeaderLength(frameData);
         
-        // Check for magic bytes
-        if (data.length < MAGIC_BYTES.length + IV_LENGTH + 16) {
+        // Check if the frame is long enough to contain our encrypted structure
+        if (frameData.length < headerLength + IV_LENGTH + AUTH_TAG_LENGTH) {
+            // This might be an unencrypted frame or a different codec, pass it through
             controller.enqueue(encodedFrame);
             return;
         }
-        
-        let hasMagic = true;
-        for (let i = 0; i < MAGIC_BYTES.length; i++) {
-            if (data[i] !== MAGIC_BYTES[i]) {
-                hasMagic = false;
-                break;
-            }
-        }
-        
-        if (!hasMagic) {
-            controller.enqueue(encodedFrame);
-            return;
-        }
-        
-        const iv = data.slice(MAGIC_BYTES.length, MAGIC_BYTES.length + IV_LENGTH);
-        const encrypted = data.slice(MAGIC_BYTES.length + IV_LENGTH);
-        
-        const decrypted = await crypto.subtle.decrypt(
-            { name: 'AES-GCM', iv: iv },
+
+        const header = frameData.slice(0, headerLength);
+        const iv = frameData.slice(headerLength, headerLength + IV_LENGTH);
+        const encryptedPayload = frameData.slice(headerLength + IV_LENGTH);
+
+        const decryptedPayload = await crypto.subtle.decrypt(
+            { name: 'AES-GCM', iv: iv, tagLength: 128 },
             encryptionKey,
-            encrypted
+            encryptedPayload
         );
         
-        encodedFrame.data = decrypted;
+        // Reconstruct original frame: [Header][Decrypted Payload]
+        const originalFrameData = new Uint8Array(headerLength + decryptedPayload.byteLength);
+        originalFrameData.set(header, 0);
+        originalFrameData.set(new Uint8Array(decryptedPayload), headerLength);
+        
+        encodedFrame.data = originalFrameData.buffer;
         controller.enqueue(encodedFrame);
+
     } catch (error) {
-        console.error('[Worker] Decrypt error:', error);
-        // Drop corrupted frame
+        // Decryption can fail if the auth tag is invalid (tampering) or key is wrong.
+        // It's safest to drop the frame.
+        console.warn('[Worker] Decryption failed, dropping frame:', error.message);
     }
 }
 
+// ============================================
+// Worker Setup
+// ============================================
+
 function handleTransform(operation, readable, writable) {
-    const transform = operation === 'encode' ? encryptFrame : decryptFrame;
+    const transformFn = operation === 'encode' ? encryptFrame : decryptFrame;
     
     const transformStream = new TransformStream({
-        transform: transform
+        transform: transformFn
     });
     
     readable.pipeThrough(transformStream).pipeTo(writable);
@@ -143,9 +188,10 @@ self.onmessage = async (event) => {
         const { masterSecret, enabled } = event.data;
         if (masterSecret) {
             encryptionKey = await deriveEncryptionKey(masterSecret);
-            isEncryptionEnabled = enabled !== false;
-            frameCounter = 0;
-            console.log('[Worker] Encryption', isEncryptionEnabled ? 'enabled' : 'disabled');
+            isEncryptionEnabled = enabled;
+            sendFrameCount = 0;
+            receiveFrameCount = 0;
+            console.log(`[Worker] E2EE Key derived. Encryption is now ${isEncryptionEnabled ? 'ENABLED' : 'DISABLED'}.`);
         } else {
             encryptionKey = null;
             isEncryptionEnabled = false;
@@ -157,6 +203,7 @@ self.onmessage = async (event) => {
     }
 };
 
+// For modern browsers supporting RTCRtpScriptTransform
 if (self.RTCTransformEvent) {
     self.onrtctransform = (event) => {
         const transformer = event.transformer;
@@ -164,4 +211,4 @@ if (self.RTCTransformEvent) {
     };
 }
 
-console.log('[Worker] Ready (simplified version)');
+console.log('[Worker] v2 with VP8 header preservation is ready.');

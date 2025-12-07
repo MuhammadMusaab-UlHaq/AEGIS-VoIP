@@ -1,14 +1,14 @@
 ================================================================================
 PROJECT CONTEXT
-Generated: 2025-12-07 12:59:14
+Generated: 2025-12-07 13:08:06
 Root: D:\info_sec_sem_proj
 ================================================================================
 
 GIT INFORMATION:
 ----------------------------------------
 Branch: master
-Last commit: 40c6aa1 - simplified worker.js, still issue in pc firefox of audio not being sent properly. (29 minutes ago)
-Status: 1 modified, 2 untracked/added
+Last commit: f7455f9 - audio fixed (7 minutes ago)
+Status: 2 modified
 
 DIRECTORY STRUCTURE:
 ----------------------------------------
@@ -23,7 +23,7 @@ info_sec_sem_proj/
 │   └── [skipped: 15.pdf]
 ├── public/
 ├── src/
-│   ├── app.js (38.0KB)
+│   ├── app.js (37.7KB)
 │   ├── crypto.js (16.2KB)
 │   ├── style.css (10.0KB)
 │   └── worker.js (4.9KB)
@@ -364,7 +364,7 @@ async function activateDoubleEncryption() {
     encryptionWorker.postMessage({
         operation: 'setKey',
         masterSecret: state.crypto.masterSecret,
-        enabled: false
+        enabled: true
     });
     
     Logger.success('🔐 Double encryption ACTIVATED with PQC-derived key');
@@ -377,7 +377,7 @@ function deactivateDoubleEncryption() {
         encryptionWorker.postMessage({
             operation: 'setKey',
             masterSecret: null,
-            enabled: false
+            enabled: true
         });
         Logger.info('Double encryption deactivated');
     }
@@ -419,7 +419,7 @@ const CONFIG = {
         audio: {
             echoCancellation: true,
 
-... [truncated - 38.0KB total]
+... [truncated - 37.7KB total]
 
 ================================================================================
 FILE: src\crypto.js

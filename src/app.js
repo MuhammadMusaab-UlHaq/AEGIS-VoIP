@@ -44,7 +44,7 @@ async function activateDoubleEncryption() {
     encryptionWorker.postMessage({
         operation: 'setKey',
         masterSecret: state.crypto.masterSecret,
-        enabled: false
+        enabled: true
     });
     
     Logger.success('🔐 Double encryption ACTIVATED with PQC-derived key');
@@ -57,7 +57,7 @@ function deactivateDoubleEncryption() {
         encryptionWorker.postMessage({
             operation: 'setKey',
             masterSecret: null,
-            enabled: false
+            enabled: true
         });
         Logger.info('Double encryption deactivated');
     }
@@ -925,27 +925,18 @@ function initializeEventListeners() {
         closeModal(elements.answerModal);
     });
     
-    elements.sasAccept.addEventListener('click', async () => {
-        Logger.success('SAS verification ACCEPTED by user');
-        state.crypto.sasVerified = true;
+    sasAccept.addEventListener('click', async () => {
+        Logger.success('SAS accepted by user');
+        sasModal.close();
         updateSecurityIndicator('verified');
-        
-        // Activate double encryption after SAS verification
-        if (supportsInsertableStreams) {
-            const activated = await activateDoubleEncryption();
-            if (activated) {
-                updateSecurityIndicator('verified-e2ee');
-            }
+
+        const activated = await activateDoubleEncryption();
+
+        if (activated) {
+            updateSecurityIndicator('verified-e2ee');
+        } else {
+            Logger.warning('Could not activate double encryption. Call is secure but not double-encrypted.');
         }
-        
-        // Send updated master secret to worker
-        encryptionWorker.postMessage({
-            operation: 'setKey',
-            masterSecret: state.crypto.masterSecret,
-            enabled: true  
-        });
-        
-        closeModal(elements.sasModal);
     });
     
     elements.sasReject.addEventListener('click', () => {
