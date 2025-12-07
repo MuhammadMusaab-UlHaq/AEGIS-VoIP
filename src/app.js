@@ -6,14 +6,90 @@
 import { Crypto, CryptoUtils } from './crypto.js';
 
 // ============================================
+// Double Encryption Support (CORRECTED)
+// ============================================
+
+let encryptionWorker = null;
+
+// More precise feature detection
+const hasModernInsertableStreams = typeof RTCRtpScriptTransform !== 'undefined';
+const hasLegacyInsertableStreams = typeof RTCRtpSender !== 'undefined' && 
+                                    typeof RTCRtpSender.prototype.createEncodedStreams !== 'undefined';
+const supportsInsertableStreams = hasModernInsertableStreams || hasLegacyInsertableStreams;
+
+function initializeEncryptionWorker() {
+    if (!supportsInsertableStreams) {
+        Logger.warning('Insertable Streams not supported - double encryption unavailable');
+        return null;
+    }
+    
+    try {
+        encryptionWorker = new Worker('/src/worker.js', { name: 'AEGIS-E2EE-Worker' });
+        Logger.success('Encryption worker initialized');
+        return encryptionWorker;
+    } catch (error) {
+        Logger.error(`Failed to initialize encryption worker: ${error.message}`);
+        return null;
+    }
+}
+
+// Activate encryption by sending the key to the worker
+async function activateDoubleEncryption() {
+    if (!encryptionWorker || !state.crypto.masterSecret) {
+        Logger.warning('Cannot activate double encryption - missing worker or key');
+        return false;
+    }
+    
+    // Send master secret to worker to ENABLE encryption
+    encryptionWorker.postMessage({
+        operation: 'setKey',
+        masterSecret: state.crypto.masterSecret,
+        enabled: false
+    });
+    
+    Logger.success('🔐 Double encryption ACTIVATED with PQC-derived key');
+    return true;
+}
+
+// Deactivate encryption (for cleanup)
+function deactivateDoubleEncryption() {
+    if (encryptionWorker) {
+        encryptionWorker.postMessage({
+            operation: 'setKey',
+            masterSecret: null,
+            enabled: false
+        });
+        Logger.info('Double encryption deactivated');
+    }
+}
+
+// ============================================
 // Configuration
 // ============================================
 
 const CONFIG = {
     iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
+        // Mix of reliable STUN servers from different providers
+        // This increases the chance of getting candidates quickly
+        { urls: 'stun:stun.l.google.com:19302' },        // Keep one Google as fallback
+        { urls: 'stun:stun.cloudflare.com:3478' },       // Cloudflare - very reliable
+        { urls: 'stun:stun.relay.metered.ca:80' },       // Metered - good uptime
+        { urls: 'stun:stun.miwifi.com:3478' },           // Xiaomi - fast
+        { urls: 'stun:stun.qq.com:3478' },               // Tencent - reliable
+        { urls: 'stun:stun.twilio.com:3478' },           // Twilio - enterprise grade
+        { urls: 'stun:stun.xirsys.com' },                // Xirsys - WebRTC focused
+        { urls: 'stun:stun.nextcloud.com:3478' },        // Nextcloud - open source
+        { urls: 'stun:relay.webwormhole.io:3478' },      // Webwormhole - P2P focused
+        { urls: 'stun:freeturn.net:3478' },              // FreeTurn - dedicated STUN/TURN
+        { urls: 'stun:stun.sipgate.net:3478' },          // Sipgate - VoIP provider
+        { urls: 'stun:stun.ekiga.net' }                  // Ekiga - open source VoIP
     ],
+    // ICE transport policy - 'all' allows both UDP and TCP candidates
+    iceTransportPolicy: 'all',
+    // Bundle policy to multiplex media
+    bundlePolicy: 'max-bundle',
+    // RTCP multiplexing policy
+    rtcpMuxPolicy: 'require',
     mediaConstraints: {
         video: {
             width: { ideal: 1280 },
@@ -26,7 +102,7 @@ const CONFIG = {
             autoGainControl: true
         }
     },
-    iceGatheringTimeout: 5000
+    iceGatheringTimeout: 5000  // Back to 5 seconds with better servers
 };
 
 // ============================================
@@ -50,7 +126,8 @@ const state = {
         kyberCiphertext: null,
         masterSecret: null,
         isKeyExchangeComplete: false,
-        sas: null
+        sas: null,
+        sasVerified: false
     }
 };
 
@@ -130,7 +207,7 @@ function updateSecurityIndicator(status) {
     const indicator = elements.securityIndicator;
     const textSpan = indicator.querySelector('.indicator-text');
     
-    indicator.classList.remove('disconnected', 'connecting', 'connected', 'unverified', 'verified');
+    indicator.classList.remove('disconnected', 'connecting', 'connected', 'unverified', 'verified', 'verified-e2ee');
     indicator.classList.add(status);
     
     const statusTexts = {
@@ -138,7 +215,8 @@ function updateSecurityIndicator(status) {
         'connecting': 'Connecting...',
         'connected': 'Connected',
         'unverified': 'Unverified',
-        'verified': 'Verified ✓'
+        'verified': 'Verified ✓',
+        'verified-e2ee': 'Verified + E2EE 🔒'
     };
     
     textSpan.textContent = statusTexts[status] || status;
@@ -216,7 +294,22 @@ function stopLocalMedia() {
 function createPeerConnection() {
     Logger.info('Creating RTCPeerConnection...');
     
-    const pc = new RTCPeerConnection({ iceServers: CONFIG.iceServers });
+    const config = {
+        iceServers: CONFIG.iceServers,
+        iceTransportPolicy: CONFIG.iceTransportPolicy,
+        bundlePolicy: CONFIG.bundlePolicy,
+        rtcpMuxPolicy: CONFIG.rtcpMuxPolicy,
+        iceCandidatePoolSize: 10  // Pre-allocate candidates for faster gathering
+    };
+    
+    // For legacy API (older Chrome without RTCRtpScriptTransform), 
+    // we MUST enable this at creation time
+    if (hasLegacyInsertableStreams && !hasModernInsertableStreams) {
+        config.encodedInsertableStreams = true;
+        Logger.info('Enabling legacy encodedInsertableStreams mode');
+    }
+    
+    const pc = new RTCPeerConnection(config);
     
     if (state.localStream) {
         state.localStream.getTracks().forEach(track => {
@@ -225,14 +318,44 @@ function createPeerConnection() {
         });
     }
     
+    // Setup sender transforms IMMEDIATELY after adding tracks
+    if (encryptionWorker && supportsInsertableStreams) {
+        pc.getSenders().forEach(sender => {
+            if (sender.track) {
+                try {
+                    if (hasModernInsertableStreams) {
+                        sender.transform = new RTCRtpScriptTransform(encryptionWorker, {
+                            operation: 'encode'
+                        });
+                        Logger.crypto(`Sender transform ready for ${sender.track.kind}`);
+                    } else if (hasLegacyInsertableStreams) {
+                        const streams = sender.createEncodedStreams();
+                        encryptionWorker.postMessage({
+                            operation: 'encode',
+                            readable: streams.readable,
+                            writable: streams.writable
+                        }, [streams.readable, streams.writable]);
+                        Logger.crypto(`Sender transform ready for ${sender.track.kind} (legacy)`);
+                    }
+                } catch (error) {
+                    Logger.error(`Sender transform setup failed: ${error.message}`);
+                }
+            }
+        });
+    }
+    
     pc.onicecandidate = (event) => {
         if (event.candidate) {
-            Logger.info(`ICE candidate gathered: ${event.candidate.candidate.substring(0, 50)}...`);
+            Logger.info(`ICE candidate: ${event.candidate.candidate.substring(0, 60)}...`);
             state.iceCandidates.push(event.candidate);
         } else {
-            Logger.success('ICE gathering complete');
+            Logger.success(`ICE gathering complete (${state.iceCandidates.length} total)`);
             state.iceGatheringComplete = true;
         }
+    };
+    
+    pc.onicegatheringstatechange = () => {
+        Logger.info(`ICE gathering state: ${pc.iceGatheringState}`);
     };
     
     pc.oniceconnectionstatechange = () => {
@@ -268,7 +391,7 @@ function createPeerConnection() {
         }
     };
     
-    pc.ontrack = (event) => {
+    pc.ontrack = async (event) => {
         Logger.success(`Received remote ${event.track.kind} track`);
         
         if (!state.remoteStream) {
@@ -278,6 +401,29 @@ function createPeerConnection() {
         
         state.remoteStream.addTrack(event.track);
         elements.remotePlaceholder.classList.add('hidden');
+        
+        // Setup receiver transform
+        if (encryptionWorker && supportsInsertableStreams) {
+            try {
+                if (hasModernInsertableStreams) {
+                    event.receiver.transform = new RTCRtpScriptTransform(encryptionWorker, {
+                        operation: 'decode'
+                    });
+                    Logger.crypto(`Receiver transform ready for ${event.track.kind}`);
+                } else if (hasLegacyInsertableStreams) {
+                    // Legacy API - this should work now because we set encodedInsertableStreams: true
+                    const streams = event.receiver.createEncodedStreams();
+                    encryptionWorker.postMessage({
+                        operation: 'decode',
+                        readable: streams.readable,
+                        writable: streams.writable
+                    }, [streams.readable, streams.writable]);
+                    Logger.crypto(`Receiver transform ready for ${event.track.kind} (legacy)`);
+                }
+            } catch (error) {
+                Logger.error(`Receiver transform failed: ${error.message}`);
+            }
+        }
     };
     
     pc.onnegotiationneeded = () => {
@@ -317,23 +463,39 @@ function parseSignalingToken(tokenString) {
 
 function waitForIceGathering() {
     return new Promise((resolve) => {
-        if (state.iceGatheringComplete) {
-            resolve();
-            return;
-        }
+        const pc = state.peerConnection;
+        const MIN_CANDIDATES = 2;    // Need at least 2 candidates
+        const MIN_WAIT = 1500;       // Minimum 1.5 seconds
+        const MAX_WAIT = 5000;       // Maximum 5 seconds
         
-        const checkInterval = setInterval(() => {
-            if (state.iceGatheringComplete) {
-                clearInterval(checkInterval);
+        const startTime = Date.now();
+        
+        const checkAndResolve = () => {
+            const elapsed = Date.now() - startTime;
+            const candidateCount = state.iceCandidates.length;
+            
+            if (candidateCount >= MIN_CANDIDATES && elapsed >= MIN_WAIT) {
+                Logger.success(`ICE gathering complete: ${candidateCount} candidates`);
                 resolve();
+            } else if (elapsed >= MAX_WAIT) {
+                if (candidateCount === 0) {
+                    Logger.error(`No ICE candidates after ${MAX_WAIT}ms - check network/firewall`);
+                } else {
+                    Logger.warning(`Only ${candidateCount} candidates after ${MAX_WAIT}ms`);
+                }
+                resolve();
+            } else {
+                setTimeout(checkAndResolve, 250);
             }
-        }, 100);
+        };
         
-        setTimeout(() => {
-            clearInterval(checkInterval);
-            Logger.warning('ICE gathering timeout - proceeding with available candidates');
-            resolve();
-        }, CONFIG.iceGatheringTimeout);
+        // Start checking after a brief delay
+        setTimeout(checkAndResolve, MIN_WAIT);
+        
+        // Log gathering state changes for debugging
+        pc.addEventListener('icegatheringstatechange', () => {
+            Logger.info(`ICE gathering state: ${pc.iceGatheringState} (${state.iceCandidates.length} candidates)`);
+        });
     });
 }
 
@@ -619,6 +781,9 @@ function hangUp() {
     
     closeAllModals();
     
+    // Deactivate encryption
+    deactivateDoubleEncryption();
+    
     if (state.peerConnection) {
         state.peerConnection.close();
         state.peerConnection = null;
@@ -645,6 +810,7 @@ function hangUp() {
     state.crypto.masterSecret = null;
     state.crypto.isKeyExchangeComplete = false;
     state.crypto.sas = null;
+    state.crypto.sasVerified = false;
     
     updateSecurityIndicator('disconnected');
     updateConnectionStateDisplay('Not Connected');
@@ -755,9 +921,26 @@ function initializeEventListeners() {
         closeModal(elements.answerModal);
     });
     
-    elements.sasAccept.addEventListener('click', () => {
+    elements.sasAccept.addEventListener('click', async () => {
         Logger.success('SAS verification ACCEPTED by user');
+        state.crypto.sasVerified = true;
         updateSecurityIndicator('verified');
+        
+        // Activate double encryption after SAS verification
+        if (supportsInsertableStreams) {
+            const activated = await activateDoubleEncryption();
+            if (activated) {
+                updateSecurityIndicator('verified-e2ee');
+            }
+        }
+        
+        // Send updated master secret to worker
+        encryptionWorker.postMessage({
+            operation: 'setKey',
+            masterSecret: state.crypto.masterSecret,
+            enabled: true  
+        });
+        
         closeModal(elements.sasModal);
     });
     
@@ -813,6 +996,15 @@ async function initialize() {
     
     Logger.success('WebRTC support confirmed');
     
+    // Detect Chrome on desktop (not Edge) and warn about potential issues
+    if (navigator.userAgent.includes('Chrome') && !navigator.userAgent.includes('Edg')) {
+        // It's Chrome (not Edge which includes 'Chrome' in UA)
+        const isPC = !/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+        if (isPC) {
+            Logger.warning('⚠️ Chrome on PC may have connectivity issues. Consider using Microsoft Edge for best results.');
+        }
+    }
+    
     try {
         Logger.info('Initializing cryptographic libraries...');
         await Crypto.initialize();
@@ -824,13 +1016,23 @@ async function initialize() {
         return;
     }
     
+    // Initialize encryption worker
+    initializeEncryptionWorker();
+    if (hasModernInsertableStreams) {
+        Logger.success('✅ Double encryption support detected (RTCRtpScriptTransform)');
+    } else if (hasLegacyInsertableStreams) {
+        Logger.success('✅ Double encryption support detected (legacy createEncodedStreams)');
+    } else {
+        Logger.warning('⚠️ Double encryption NOT available on this browser');
+    }
+    
     initializeEventListeners();
     Logger.success('Event listeners initialized');
     
     setButtonStates('initial');
     updateSecurityIndicator('disconnected');
     
-    Logger.success('=== AEGIS-VoIP Ready (Day 3: SAS Verification Enabled) ===');
+    Logger.success('=== AEGIS-VoIP Ready (Day 4: Double Encryption + SAS) ===');
 }
 
 document.addEventListener('DOMContentLoaded', initialize);

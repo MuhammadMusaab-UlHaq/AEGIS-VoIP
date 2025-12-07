@@ -104,6 +104,30 @@ nav {
     background: var(--aegis-success);
 }
 
+.indicator.verified-e2ee {
+    background: linear-gradient(135deg, rgba(81, 207, 102, 0.3), rgba(77, 171, 247, 0.3));
+    border: 1px solid var(--aegis-success);
+}
+.indicator.verified-e2ee .indicator-dot {
+    background: var(--aegis-success);
+    box-shadow: 0 0 10px var(--aegis-success);
+    animation: pulse-e2ee 1.5s infinite;
+}
+.indicator.verified-e2ee .indicator-text::after {
+    content: ' 🔐';
+}
+
+@keyframes pulse-e2ee {
+    0%, 100% { 
+        opacity: 1; 
+        box-shadow: 0 0 10px var(--aegis-success);
+    }
+    50% { 
+        opacity: 0.6; 
+        box-shadow: 0 0 20px var(--aegis-success);
+    }
+}
+
 /* ============================================
    Video Section
    ============================================ */
